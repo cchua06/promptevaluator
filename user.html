@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GenAI Prompt Feedback POC</title>
+    <!-- Tailwind via CDN for quick styling (can be removed/replaced later) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel so we can write JSX in this single file. Swap out for a build step (Vite/Webpack) later. -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body { @apply bg-gray-50 text-gray-800; }
+      textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      .fade-in { animation: fade-in 0.3s ease-out; }
+      @keyframes fade-in { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
+    </style>
+  </head>
+  <body class="min-h-screen flex flex-col">
+    <div id="root" class="flex-1"></div>
+
+    <script type="text/babel">
+      // ---------------------------
+      // Configuration & helpers
+      // ---------------------------
+      const LLM_OPTIONS = [
+        "GPT-4o",
+        "GPT-o3",
+        "Claude Sonnet 4",
+        "Claude 3.5 Sonnet",
+        "Gemini 1.5 Pro",
+        "Grok 3"
+      ];
+
+      // Local‑storage key used by admin.html to read submissions
+      const STORAGE_KEY = "prompt_records_v1";
+
+      const saveRecords = (records) => localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+
+      // ---------------------------
+      // Mock evaluation (no external calls)
+      // ---------------------------
+      function mockEvaluatePrompt(prompt, model) {
+        const length           = prompt.trim().split(/\s+/).length;
+        const hasRole          = /you are|act as|role:/i.test(prompt);
+        const hasOutputFormat  = /format|return|respond with|output/i.test(prompt);
+        const hasConstraints   = /must|should|limit|do not/i.test(prompt);
+        const score = Math.min(100, 20 + (length > 30 ? 20 : 0) + (hasRole ? 20 : 0) + (hasOutputFormat ? 20 : 0) + (hasConstraints ? 20 : 0));
+
+        const notes = [];
+        if (length < 30)        notes.push("Prompt is quite short; consider adding context and desired outcome.");
+        if (!hasRole)           notes.push("Define the assistant's role (e.g., 'You are an expert data analyst...').");
+        if (!hasOutputFormat)   notes.push("Specify the desired output format or structure.");
+        if (!hasConstraints)    notes.push("Add constraints or evaluation criteria to guide the response.");
+        if (notes.length === 0) notes.push("Looks solid! You covered role, structure, and constraints.");
+
+        return { score, notes: notes.join(" ") };
+      }
+
+      function mockLLMOutput(prompt, model) {
+        const snippet = prompt.length > 400 ? prompt.slice(0, 400) + "..." : prompt;
+        return `Dummy ${model} output (for demo only)\n\n${snippet}\n\n[This is placeholder text. Replace with real model response later.]`;
+      }
+
+      function sendToEvaluator({ prompt, model }) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const evalRes     = mockEvaluatePrompt(prompt, model);
+            const dummyOutput = mockLLMOutput(prompt, model);
+            resolve({ ...evalRes, dummyOutput });
+          }, 600);
+        });
+      }
+
+      // ---------------------------
+      // React Components
+      // ---------------------------
+      function App() {
+        const [name,       setName]       = React.useState("");
+        const [model,      setModel]      = React.useState(LLM_OPTIONS[0]);
+        const [prompt,     setPrompt]     = React.useState("");
+        const [records,    setRecords]    = React.useState([]); // start empty
+        const [isSubmitting, setIsSubmitting] = React.useState(false);
+        const [lastEval,   setLastEval]   = React.useState(null); // {score, notes, model, ts}
+        const [lastDummy,  setLastDummy]  = React.useState(null); // {model, text, ts}
+
+        // Persist records so admin.html can show them
+        React.useEffect(() => saveRecords(records), [records]);
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          if (!prompt.trim()) return;
+          setIsSubmitting(true);
+
+          const { score, notes, dummyOutput } = await sendToEvaluator({ prompt, model });
+          const timestamp = new Date().toISOString();
+          const newRec = {
+            id: crypto.randomUUID(),
+            timestamp,
+            name: name.trim(),
+            model,
+            prompt,
+            score,
+            notes,
+            dummyOutput,
+          };
+
+          setRecords((prev) => [newRec, ...prev]);
+          setLastEval({ score, notes, model, ts: timestamp });
+          setLastDummy({ model, text: dummyOutput, ts: timestamp });
+
+          setPrompt("");
+          setIsSubmitting(false);
+        };
+
+        return (
+          <div className="max-w-6xl mx-auto py-8 px-4">
+            <header className="mb-8">
+              <h1 className="text-3xl font-bold mb-2">GenAI Prompt Feedback POC</h1>
+              <p className="text-gray-600">Quickly score & review prompts during enablement sessions.</p>
+            </header>
+
+            <section className="mb-10">
+              <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-4">
+                {/* Name input */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    className="w-full border rounded px-3 py-2"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g., Alice"
+                  />
+                </div>
+
+                {/* Model selector */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">LLM Model</label>
+                  <select className="w-full border rounded px-3 py-2" value={model} onChange={(e) => setModel(e.target.value)}>
+                    {LLM_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Prompt textarea */}
+                <div>
+                  <label className="block text-sm font-medium mb-1">Prompt</label>
+                  <textarea
+                    className="w-full border rounded px-3 py-2 h-40"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Paste or write the participant's prompt here..."
+                  />
+                </div>
+
+                {/* Submit */}
+                <div className="flex items-center gap-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !prompt.trim()}
+                    className={`px-4 py-2 rounded text-white ${isSubmitting || !prompt.trim() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                    {isSubmitting ? 'Evaluating…' : 'Prompt & Evaluate'}
+                  </button>
+                  <span className="ml-auto text-sm text-gray-500 hidden sm:inline">Stored locally for admin view</span>
+                </div>
+              </form>
+
+              {/* Evaluation feedback */}
+              {lastEval && (
+                <div className="mt-6 bg-white border-l-4 border-blue-500 shadow rounded-lg p-4 fade-in">
+                  <h3 className="font-semibold mb-2 text-sm">Evaluation Feedback <span className="text-gray-500">({new Date(lastEval.ts).toLocaleString()})</span></h3>
+                  <p className="mb-1"><span className="font-medium">Score:</span> {lastEval.score}/100</p>
+                  <p className="whitespace-pre-wrap break-words text-sm">{lastEval.notes}</p>
+                </div>
+              )}
+
+              {/* Dummy output */}
+              {lastDummy && (
+                <div className="mt-6 bg-slate-50 border rounded-lg p-4 fade-in">
+                  <h3 className="font-semibold mb-2 text-sm">Dummy {lastDummy.model} Output <span className="text-gray-500">({new Date(lastDummy.ts).toLocaleString()})</span></h3>
+                  <pre className="whitespace-pre-wrap break-words text-xs sm:text-sm">{lastDummy.text}</pre>
+                </div>
+              )}
+            </section>
+
+            <footer className="mt-12 text-xs text-gray-400 text-center">
+              <p>POC only – no real LLM calls. Replace mock functions with API calls in production.</p>
+            </footer>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+  </body>
+</html>
