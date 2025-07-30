@@ -8,10 +8,15 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-      body { @apply bg-gray-50 text-gray-800; }
+      body { @apply bg-gray-50 text-gray-800; font-family: 'Inter', sans-serif; }
       .fade-in { animation: fade-in 0.25s ease-out; }
       @keyframes fade-in { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
+      h1, h2, h3, h4, h5, h6, .font-bold, .font-semibold, .text-3xl, .text-4xl, .font-bold, .font-semibold {
+        font-family: 'Inter', sans-serif;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body class="min-h-screen flex flex-col">
@@ -34,14 +39,13 @@
       const saveRecords = (recs) => localStorage.setItem(STORAGE_KEY, JSON.stringify(recs));
       const csvEscape   = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
       function exportCSV(records) {
-        const header = ['timestamp','name','model','prompt','score','notes','output']
+        const header = ['timestamp','firstName','lastName','prompt','notes','output']
                         .map(csvEscape).join(',');
         const rows   = records.map(r => [
           r.timestamp,
-          r.name ?? '',
-          r.model,
+          r.firstName ?? '',
+          r.lastName ?? '',
           r.prompt,
-          r.score,
           r.notes,
           r.dummyOutput
         ].map(csvEscape).join(',')).join('\n');
@@ -60,9 +64,9 @@
           if (!filter.trim()) return records;
           const f = filter.toLowerCase();
           return records.filter(r =>
-            (r.name ?? '').toLowerCase().includes(f) ||
-            r.model.toLowerCase().includes(f)        ||
-            r.prompt.toLowerCase().includes(f)       ||
+            (r.firstName ?? '').toLowerCase().includes(f) ||
+            (r.lastName ?? '').toLowerCase().includes(f)  ||
+            r.prompt.toLowerCase().includes(f)            ||
             (r.notes ?? '').toLowerCase().includes(f)
           );
         }, [records, filter]);
@@ -73,7 +77,7 @@
               <h2 className="text-xl font-semibold">Submissions</h2>
               <input
                 type="text"
-                placeholder="Filter by name/model/text…"
+                placeholder="Filter by name/text…"
                 className="ml-auto border rounded px-3 py-1 text-sm"
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
@@ -88,10 +92,9 @@
                   <thead className="bg-gray-100 text-sm">
                     <tr>
                       <th className="px-4 py-2 text-left">Timestamp</th>
-                      <th className="px-4 py-2 text-left">Name</th>
-                      <th className="px-4 py-2 text-left">Model</th>
+                      <th className="px-4 py-2 text-left">First Name</th>
+                      <th className="px-4 py-2 text-left">Last Name</th>
                       <th className="px-4 py-2 text-left">Prompt</th>
-                      <th className="px-4 py-2 text-left">Score</th>
                       <th className="px-4 py-2 text-left">Notes</th>
                       <th className="px-4 py-2 text-left">Output</th>
                       <th className="px-4 py-2"></th>
@@ -101,15 +104,14 @@
                     {filtered.map(r => (
                       <tr key={r.id} className="border-t hover:bg-gray-50 fade-in">
                         <td className="px-4 py-2 align-top whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.name || '—'}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.model}</td>
+                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.firstName || '—'}</td>
+                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.lastName || '—'}</td>
                         <td className="px-4 py-2 align-top max-w-lg">
                           <details>
                             <summary className="cursor-pointer text-blue-600 hover:underline">View</summary>
                             <pre className="whitespace-pre-wrap break-words mt-2">{r.prompt}</pre>
                           </details>
                         </td>
-                        <td className="px-4 py-2 align-top">{r.score}</td>
                         <td className="px-4 py-2 align-top max-w-lg">
                           <pre className="whitespace-pre-wrap break-words">{r.notes}</pre>
                         </td>
