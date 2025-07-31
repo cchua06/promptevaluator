@@ -39,7 +39,7 @@
       const saveRecords = (recs) => localStorage.setItem(STORAGE_KEY, JSON.stringify(recs));
       const csvEscape   = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
       function exportCSV(records) {
-        const header = ['timestamp','firstName','lastName','prompt','notes','output']
+        const header = ['timestamp','firstName','lastName','prompt','notes','facilitatorFeedback']
                         .map(csvEscape).join(',');
         const rows   = records.map(r => [
           r.timestamp,
@@ -47,7 +47,7 @@
           r.lastName ?? '',
           r.prompt,
           r.notes,
-          r.dummyOutput
+          r.facilitatorFeedback
         ].map(csvEscape).join(',')).join('\n');
         const blob = new Blob([header+'\n'+rows], {type:'text/csv;charset=utf-8;'});
         const url  = URL.createObjectURL(blob);
@@ -96,7 +96,7 @@
                       <th className="px-4 py-2 text-left">Last Name</th>
                       <th className="px-4 py-2 text-left">Prompt</th>
                       <th className="px-4 py-2 text-left">Notes</th>
-                      <th className="px-4 py-2 text-left">Output</th>
+                      <th className="px-4 py-2 text-left">Facilitator Feedback</th>
                       <th className="px-4 py-2"></th>
                     </tr>
                   </thead>
@@ -116,10 +116,7 @@
                           <pre className="whitespace-pre-wrap break-words">{r.notes}</pre>
                         </td>
                         <td className="px-4 py-2 align-top max-w-lg">
-                          <details>
-                            <summary className="cursor-pointer text-blue-600 hover:underline">Show</summary>
-                            <pre className="whitespace-pre-wrap break-words mt-2">{r.dummyOutput}</pre>
-                          </details>
+                          <pre className="whitespace-pre-wrap break-words mt-2">{r.facilitatorFeedback}</pre>
                         </td>
                         <td className="px-4 py-2 align-top text-right">
                           <button onClick={() => onDelete(r.id)} className="text-red-600 hover:underline text-xs">Delete</button>

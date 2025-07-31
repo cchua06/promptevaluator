@@ -4,12 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GenAI Prompt Feedback POC</title>
-    <!-- Tailwind via CDN for quick styling (can be removed/replaced later) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel so we can write JSX in this single file. Swap out for a build step (Vite/Webpack) later. -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
@@ -28,30 +25,145 @@
 
     <script type="text/babel">
       // ---------------------------
-      // Helpers
+      // OpenAI Evaluator Function
       // ---------------------------
-      function mockEvaluatePrompt(prompt) {
-        const length           = prompt.trim().split(/\s+/).length;
-        const hasRole          = /you are|act as|role:/i.test(prompt);
-        const hasOutputFormat  = /format|return|respond with|output/i.test(prompt);
-        const hasConstraints   = /must|should|limit|do not/i.test(prompt);
 
-        const notes = [];
-        if (length < 30)        notes.push("Prompt is quite short; consider adding context and desired outcome.");
-        if (!hasRole)           notes.push("Define the assistant's role (e.g., 'You are an expert data analyst...').");
-        if (!hasOutputFormat)   notes.push("Specify the desired output format or structure.");
-        if (!hasConstraints)    notes.push("Add constraints or evaluation criteria to guide the response.");
-        if (notes.length === 0) notes.push("Looks solid! You covered role, structure, and constraints.");
+      async function evaluatePrompt(prompt) {
+        // System instructions for the evaluator
+        const systemInstructions = `
+        📥 SYSTEM PROMPT: Prompt Structure Evaluator
 
-        return { notes: notes.join(" ") };
+        You are a prompt reviewer. Your task is to evaluate whether a user’s prompt includes all 4 required components:
+
+        Task: Clear action with a specific deliverable and audience.
+
+        Input: Raw materials, context, or data sources the AI should use.
+
+        Steps: A numbered, sequential thought process (with action verbs).
+
+        Output: Clear format, tone, and structural expectations.
+
+        🔍 Instructions:
+        Parse the user’s prompt carefully.
+
+        For each component, mark as:
+
+        ✅ Present
+
+        ❌ Missing
+        If present but weak (vague, incomplete, or lacking best practices), flag it.
+
+        Then produce a brief structured summary using the appropriate output format.
+
+        📋 Output Format:
+        If Failed:
+
+        Let’s try again! 🤓
+
+        Missing components: [List any of: Task, Input, Steps, Output]
+
+        Improvements needed in: [List components that are present but need strengthening]
+
+        Breakdown:
+        Task: [If weak or missing, explain briefly why]
+        Input: [If weak or missing, explain briefly why]
+        Steps: [If weak or missing, explain briefly why]
+        Output: [If weak or missing, explain briefly why]
+
+        If Successful:
+
+        Amazing job! 🎉
+
+        All 4 components are present!
+
+        Best practices demonstrated in: [List highlights such as “clearly scoped input”, “well-sequenced steps”, “precise output formatting”]
+
+        ✅ Evaluation Criteria Recap:
+        Task: Starts with a verb, includes a defined deliverable and target audience.
+
+        Input: Specific and bounded; includes background, data, or cited sources.
+
+        Steps: Numbered, uses action verbs, includes decisions or clarifications where needed.
+
+        Output: Provides template-level clarity on tone, length, structure, and format.
+
+        ⛔️ Do not suggest a revised prompt.
+        ⛔️ Do not include a question or ask if the user wants help.
+        ⛔️ Do not end with guidance or speculative improvements.
+        ⛔️ Do not include any instruction text or headings in your output — only use the approved output format above.
+
+        Keep your evaluation concise and focused—only highlight what matters most.
+        `;
+
+        try {
+          const res = await fetch('/api/evaluate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, systemInstructions })
+          });
+          if (!res.ok) {
+            throw new Error(`API error: ${res.status} ${res.statusText}`);
+          }
+          const data = await res.json();
+          return { notes: data.notes };
+        } catch (err) {
+          console.error('Error evaluating prompt:', err);
+          return { notes: 'There was an error contacting the evaluation service.' };
+        }
       }
 
       const isBlank = (s) => !s || s.trim().length === 0;
-      const mockLLMOutput = (p) => {
-        const snippet = p.length > 400 ? p.slice(0, 400) + "..." : p;
-        return `Dummy model output (for demo only)\n\n${snippet}\n\n[This is placeholder text. Replace with real model response later.]`;
+      // Call backend to generate Facilitator Feedback using OpenAI GPT-4o
+      const generateFacilitatorFeedback = async (prompt) => {
+        const systemInstructions = `
+        Your task is to generate structured support content to help the facilitator guide the participant toward a better prompt. Your output must follow this format:
+
+        <task_summary>
+
+        Summarize what the participant is trying to achieve with their prompt. Write 1–2 objective sentences. If the task is unclear, say so.
+
+        Write 2–5 bullet points that provide facilitator-facing guidance. These should be written as confident suggestions the facilitator can act on—not as questions to ask the participant. The facilitator can already see what’s wrong from the evaluation; your job is to help them move the participant forward.
+
+        Do not include direct criticism or rephrasing of the prompt. Focus on helpful strategies. Be use-case specific when possible: e.g., suggest uploading a file, breaking down the task, clarifying audience, etc.
+
+        Always include this as the final bullet:
+
+        Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.
+
+        Example output:
+
+        Summary:
+        The participant is attempting to generate key points from a team-building event agenda, but the content source isn’t provided in the prompt.
+
+        Guidance:
+        - Suggest narrowing the focus to a specific section or type of key point (e.g., logistics, outcomes, speakers).  
+        - Recommend providing the actual agenda content or explicitly referencing an uploaded file.  
+        - Encourage specifying the intended audience for the output, which may affect tone and format.  
+        - Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.  
+        `;
+
+        try {
+          const res = await fetch('/api/facilitator-feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, systemInstructions })
+          });
+          if (!res.ok) {
+            throw new Error(`API error: ${res.status} ${res.statusText}`);
+          }
+          const data = await res.json();
+          return data.feedback || '';
+        } catch (err) {
+          console.error('Error generating Facilitator Feedback:', err);
+          return 'There was an error generating the facilitator feedback.';
+        }
       };
-      const sendToEvaluator = ({ prompt }) => new Promise(r => setTimeout(() => r({ ...mockEvaluatePrompt(prompt), dummyOutput: mockLLMOutput(prompt) }), 600));
+
+      const sendToEvaluator = async ({ prompt }) => {
+        const { notes } = await evaluatePrompt(prompt);
+        const facilitatorFeedback = await generateFacilitatorFeedback(prompt);
+        return { notes, facilitatorFeedback };
+      };
 
       // ---------------------------
       // React Component
@@ -63,7 +175,7 @@
         const [records,   setRecords]   = React.useState([]);
         const [isSubmitting, setIsSubmitting] = React.useState(false);
         const [lastEval,  setLastEval]  = React.useState(null);
-        const [lastDummy, setLastDummy] = React.useState(null);
+        // Facilitator Feedback is not shown to the user
 
         React.useEffect(() => localStorage.setItem("prompt_records_v1", JSON.stringify(records)), [records]);
 
@@ -73,36 +185,30 @@
           if (!prompt.trim()) return;
           setIsSubmitting(true);
 
-          const { notes, dummyOutput } = await sendToEvaluator({ prompt });
+          const { notes, facilitatorFeedback } = await sendToEvaluator({ prompt });
           const ts = new Date().toISOString();
-          const newRec = { id: crypto.randomUUID(), timestamp: ts, firstName: firstName.trim(), lastName: lastName.trim(), prompt, notes, dummyOutput };
+          const newRec = { id: crypto.randomUUID(), timestamp: ts, firstName: firstName.trim(), lastName: lastName.trim(), prompt, notes, facilitatorFeedback };
 
           setRecords(prev => [newRec, ...prev]);
           setLastEval({ notes, ts });
-          setLastDummy({ text: dummyOutput, ts });
           setPrompt(""); setFirstName(""); setLastName("");
           setIsSubmitting(false);
         };
 
         return (
           <div className="w-full pt-20 pb-12 px-4">
-            {/* Row with symmetric logo + main + spacer */}
             <div className="flex items-start max-w-7xl mx-auto">
-              {/* Left logo column */}
               <div className="flex-shrink-0 w-[160px] mr-8 flex justify-center">
-                <img src="./resources/tm_logo.jpg" alt="Thinking Machines Logo" className="h-[160px] w-auto" />
+                <img src="./resources/tm_logo.png" alt="Thinking Machines Logo" className="h-[160px] w-auto" />
               </div>
 
-              {/* Main column wider */}
               <div className="flex-1 max-w-5xl mx-auto">
-                {/* Header */}
                 <header className="mb-6 text-left">
                   <h1 className="text-4xl font-bold leading-tight mb-2">Thinking Machines Prompt Evaluator</h1>
                   <span className="text-sm text-gray-500 hidden sm:inline">Beta testing</span>
                   <p className="text-gray-600 mt-2">Quickly score &amp; review prompts during enablement sessions.</p>
                 </header>
 
-                {/* Form */}
                 <section className="mb-10">
                   <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-10 space-y-8">
                     <div>
@@ -123,7 +229,6 @@
                     </div>
                   </form>
 
-                  {/* Feedback */}
                   {lastEval && (
                     <div className="mt-10 bg-white border-l-4 border-blue-500 shadow rounded-lg p-8 fade-in">
                       <h3 className="font-semibold mb-2 text-base">Evaluation Feedback <span className="text-gray-500">({new Date(lastEval.ts).toLocaleString()})</span></h3>
@@ -131,20 +236,14 @@
                     </div>
                   )}
 
-                  {lastDummy && (
-                    <div className="mt-10 bg-slate-50 border rounded-lg p-8 fade-in">
-                      <h3 className="font-semibold mb-2 text-base">Dummy Model Output <span className="text-gray-500">({new Date(lastDummy.ts).toLocaleString()})</span></h3>
-                      <pre className="whitespace-pre-wrap break-words text-xs sm:text-sm">{lastDummy.text}</pre>
-                    </div>
-                  )}
+                  {/* Facilitator Feedback is not shown to the user */}
                 </section>
 
                 <footer className="mt-20 text-xs text-gray-400 text-center">
-                  <p>POC only – no real LLM calls. Replace mock functions with API calls in production.</p>
+                  <p>POC only – using live OpenAI API evaluation. Store your API key securely.</p>
                 </footer>
               </div>
 
-              {/* Right spacer column matching logo width */}
               <div className="flex-shrink-0 w-[160px] ml-8"></div>
             </div>
           </div>
