@@ -130,6 +130,10 @@
 
         Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.
 
+        At the end, always include the following accuracy instruction:
+
+        Don't make up anything. Say "I don't know" if the information was not provided, unclear, or unknown. Never guess.
+
         Example output:
 
         Summary:
@@ -165,6 +169,22 @@
         return { notes, facilitatorFeedback };
       };
 
+
+      // ---------------------------
+      // Storage Toggle
+      // ---------------------------
+      let USE_LOCAL_STORAGE = false; // Will be set by backend
+      const STORAGE_KEY = 'prompt_records_v1';
+
+      function saveRecordLocal(rec) {
+        const arr = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+        arr.unshift(rec);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+      }
+      function loadRecordsLocal() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+      }
+
       // ---------------------------
       // React Component
       // ---------------------------
@@ -177,7 +197,18 @@
         const [lastEval,  setLastEval]  = React.useState(null);
         // Facilitator Feedback is not shown to the user
 
-        React.useEffect(() => localStorage.setItem("prompt_records_v1", JSON.stringify(records)), [records]);
+        // On mount, get storage mode and load records if local
+        React.useEffect(() => {
+          fetch('/api/storage-mode').then(r => r.json()).then(({ useLocalStorage }) => {
+            USE_LOCAL_STORAGE = useLocalStorage;
+            if (USE_LOCAL_STORAGE) setRecords(loadRecordsLocal());
+          });
+        }, []);
+
+        // For localStorage, keep in sync
+        React.useEffect(() => {
+          if (USE_LOCAL_STORAGE) localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        }, [records]);
 
         const handleSubmit = async (e) => {
           e.preventDefault();
@@ -189,7 +220,22 @@
           const ts = new Date().toISOString();
           const newRec = { id: crypto.randomUUID(), timestamp: ts, firstName: firstName.trim(), lastName: lastName.trim(), prompt, notes, facilitatorFeedback };
 
-          setRecords(prev => [newRec, ...prev]);
+          if (USE_LOCAL_STORAGE) {
+            saveRecordLocal(newRec);
+            setRecords(prev => [newRec, ...prev]);
+          } else {
+            // Save to backend
+            try {
+              await fetch('/api/record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newRec)
+              });
+            } catch (err) {
+              alert('Failed to save record to server.');
+            }
+            setRecords(prev => [newRec, ...prev]);
+          }
           setLastEval({ notes, ts });
           setPrompt(""); setFirstName(""); setLastName("");
           setIsSubmitting(false);
