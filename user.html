@@ -114,36 +114,32 @@
 
       const isBlank = (s) => !s || s.trim().length === 0;
       // Call backend to generate Facilitator Feedback using OpenAI GPT-4o
-      const generateFacilitatorFeedback = async (prompt) => {
+      const generateFacilitatorFeedback = async (prompt, evaluation) => {
+        const formattedInput = `Prompt:\n${prompt}\n\nEvaluation:\n${evaluation}`;
         const systemInstructions = `
-        Your task is to generate structured support content to help the facilitator guide the participant toward a better prompt. Your output must follow this format:
+        Your task is to generate structured support content to help the facilitator guide the participant toward a better prompt.
 
-        <task_summary>
+        Inputs:
+        Prompt:
+        <prompt>
 
-        Summarize what the participant is trying to achieve with their prompt. Write 1–2 objective sentences. If the task is unclear, say so.
+        Evaluation:
+        <evaluation>
 
-        Write 2–5 bullet points that provide facilitator-facing guidance. These should be written as confident suggestions the facilitator can act on—not as questions to ask the participant. The facilitator can already see what’s wrong from the evaluation; your job is to help them move the participant forward.
+        Your output must follow this format:
 
-        Do not include direct criticism or rephrasing of the prompt. Focus on helpful strategies. Be use-case specific when possible: e.g., suggest uploading a file, breaking down the task, clarifying audience, etc.
+        Task Summary:
 
-        Always include this as the final bullet:
-
-        Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.
-
-        At the end, always include the following accuracy instruction:
-
-        Don't make up anything. Say "I don't know" if the information was not provided, unclear, or unknown. Never guess.
-
-        Example output:
-
-        Summary:
-        The participant is attempting to generate key points from a team-building event agenda, but the content source isn’t provided in the prompt.
+        Summarize what the participant is trying to achieve based on their prompt. Use the evaluation only to clarify what’s missing or weak—don’t just restate it. Write 1–2 objective sentences. If the task is unclear, say so.
 
         Guidance:
-        - Suggest narrowing the focus to a specific section or type of key point (e.g., logistics, outcomes, speakers).  
-        - Recommend providing the actual agenda content or explicitly referencing an uploaded file.  
-        - Encourage specifying the intended audience for the output, which may affect tone and format.  
-        - Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.  
+
+        Write 2–5 bullet points that provide facilitator-facing guidance. These should be confident, actionable suggestions—not questions. Focus on moving the participant forward based on what’s wrong, as indicated in the evaluation. Avoid direct criticism or prompt rewrites.
+
+        Be use-case specific when possible: e.g., suggest uploading a file, clarifying audience, giving example inputs, or breaking the task into steps.
+
+        Always include this as the final bullet:
+        - Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.
         `;
 
         try {
@@ -164,8 +160,9 @@
       };
 
       const sendToEvaluator = async ({ prompt }) => {
-        const { notes } = await evaluatePrompt(prompt);
-        const facilitatorFeedback = await generateFacilitatorFeedback(prompt);
+        const evaluationFeedback = await evaluatePrompt(prompt);
+        const { notes } = evaluationFeedback;
+        const facilitatorFeedback = await generateFacilitatorFeedback(prompt, evaluationFeedback.notes);
         return { notes, facilitatorFeedback };
       };
 
@@ -174,6 +171,7 @@
       // Storage Toggle
       // ---------------------------
       let USE_LOCAL_STORAGE = false; // Will be set by backend
+
       const STORAGE_KEY = 'prompt_records_v1';
 
       function saveRecordLocal(rec) {
@@ -218,13 +216,21 @@
 
           const { notes, facilitatorFeedback } = await sendToEvaluator({ prompt });
           const ts = new Date().toISOString();
-          const newRec = { id: crypto.randomUUID(), timestamp: ts, firstName: firstName.trim(), lastName: lastName.trim(), prompt, notes, facilitatorFeedback };
-
+          const newRec = {
+            id: crypto.randomUUID(),
+            ts,
+            firstname: firstName.trim(),
+            lastname: lastName.trim(),
+            prompt,
+            notes,
+            facilitatorfeedback: facilitatorFeedback
+          };
+          console.log(newRec);
           if (USE_LOCAL_STORAGE) {
             saveRecordLocal(newRec);
             setRecords(prev => [newRec, ...prev]);
           } else {
-            // Save to backend
+            // Save to backend (now using prompts table in promptdb)
             try {
               await fetch('/api/record', {
                 method: 'POST',

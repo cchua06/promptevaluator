@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "description": "GenAI Prompt Feedback POC - Express server for SPA.",
   "main": "server.js",
-    "scripts": {
+  "scripts": {
     "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.16.3"
   }
 }

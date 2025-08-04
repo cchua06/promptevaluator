@@ -33,26 +33,12 @@
       // ---------------------------
       // Storage toggle
       let USE_LOCAL_STORAGE = false;
-      const STORAGE_KEY = 'prompt_records_v1';
-      function loadRecordsLocal() {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-      }
-      function saveRecordsLocal(arr) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-      }
-      function deleteRecordLocal(id) {
-        const arr = loadRecordsLocal().filter(r => r.id !== id);
-        saveRecordsLocal(arr);
-      }
-      function updateRecordLocal(id, rec) {
-        const arr = loadRecordsLocal().map(r => r.id === id ? { ...r, ...rec } : r);
-        saveRecordsLocal(arr);
-      }
-      // Backend CRUD
+
+      // Data helpers
       async function fetchRecords() {
         if (USE_LOCAL_STORAGE) return loadRecordsLocal();
         const res = await fetch('/api/records');
-        return await res.json();
+        return res.json();
       }
       async function deleteRecord(id) {
         if (USE_LOCAL_STORAGE) return deleteRecordLocal(id);
@@ -66,101 +52,39 @@
           body: JSON.stringify(rec)
         });
       }
-      const csvEscape   = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+      // CSV export helper
+      const csvEscape = v => `"${String(v ?? '').replaceAll('"', '""')}"`;
       function exportCSV(records) {
-        const header = ['timestamp','firstName','lastName','prompt','evaluationFeedback','facilitatorFeedback']
-                        .map(csvEscape).join(',');
-        const rows   = records.map(r => [
+        const header = ['timestamp','firstname','lastname','prompt','notes','facilitatorfeedback']
+          .map(csvEscape).join(',');
+        const rows = records.map(r => [
           r.timestamp,
-          r.firstName ?? '',
-          r.lastName ?? '',
+          r.firstname ?? '',
+          r.lastname ?? '',
           r.prompt,
           r.notes,
-          r.facilitatorFeedback
+          r.facilitatorfeedback
         ].map(csvEscape).join(',')).join('\n');
         const blob = new Blob([header+'\n'+rows], {type:'text/csv;charset=utf-8;'});
-        const url  = URL.createObjectURL(blob);
-        const a    = Object.assign(document.createElement('a'), { href:url, download:`prompt_records_${new Date().toISOString().slice(0,10)}.csv` });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), { href:url, download:`prompt_records_${new Date().toISOString().slice(0,10)}.csv` });
         document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      }
+
+      function adjustDate(timestamp) {
+        const d = new Date(timestamp);
+        // Format: YYYY-MM-DD HH:MM (no seconds)
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const day = String(d.getDate()).padStart(2,'0');
+        const hr = String(d.getHours()).padStart(2,'0');
+        const min = String(d.getMinutes()).padStart(2,'0');
+        return `${y}-${m}-${day} ${hr}:${min}`;
       }
 
       // ---------------------------
       // Components
       // ---------------------------
-      function AdminTable({ records, onDelete }) {
-        const [filter, setFilter] = React.useState('');
-        const filtered = React.useMemo(() => {
-          if (!filter.trim()) return records;
-          const f = filter.toLowerCase();
-          return records.filter(r =>
-            (r.firstName ?? '').toLowerCase().includes(f) ||
-            (r.lastName ?? '').toLowerCase().includes(f)  ||
-            r.prompt.toLowerCase().includes(f)            ||
-            (r.notes ?? '').toLowerCase().includes(f)
-          );
-        }, [records, filter]);
-
-        return (
-          <section>
-            <div className="flex items-center mb-3">
-              <h2 className="text-xl font-semibold">Submissions</h2>
-              <input
-                type="text"
-                placeholder="Filter by name/text…"
-                className="ml-auto border rounded px-3 py-1 text-sm"
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-              />
-            </div>
-
-            {filtered.length === 0 ? (
-              <p className="text-gray-500">No records yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white shadow rounded-lg overflow-hidden">
-                  <thead className="bg-gray-100 text-sm">
-                    <tr>
-                      <th className="px-4 py-2 text-left">Timestamp</th>
-                      <th className="px-4 py-2 text-left">First Name</th>
-                      <th className="px-4 py-2 text-left">Last Name</th>
-                      <th className="px-4 py-2 text-left">Prompt</th>
-                      <th className="px-4 py-2 text-left">Result</th>
-                      <th className="px-4 py-2 text-left">Evaluation Feedback</th>
-                      <th className="px-4 py-2 text-left">Facilitator Feedback</th>
-                      <th className="px-4 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    {filtered.map(r => (
-                      <tr key={r.id} className="border-t hover:bg-gray-50 fade-in">
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.firstName || '—'}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.lastName || '—'}</td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <details>
-                            <summary className="cursor-pointer text-blue-600 hover:underline">View</summary>
-                            <pre className="whitespace-pre-wrap break-words mt-2">{r.prompt}</pre>
-                          </details>
-                        </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <pre className="whitespace-pre-wrap break-words">{r.notes}</pre>
-                        </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <pre className="whitespace-pre-wrap break-words mt-2">{r.facilitatorFeedback}</pre>
-                        </td>
-                        <td className="px-4 py-2 align-top text-right">
-                          <button onClick={() => onDelete(r.id)} className="text-red-600 hover:underline text-xs">Delete</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        );
-      }
-
       function AdminApp() {
         const [records, setRecords] = React.useState([]);
         const [editingId, setEditingId] = React.useState(null);
@@ -195,7 +119,7 @@
         const handleEditCancel = () => setEditingId(null);
 
         return (
-          <div className="w-4/5 mx-auto py-10 px-2">
+          <div className="mx-auto py-10 px-2" style={{ width: '80%' }}>
             <header className="mb-8 flex items-center gap-3 flex-wrap">
               <h1 className="text-3xl font-bold mr-auto">Prompt Submissions – Admin</h1>
               <button
@@ -215,33 +139,35 @@
 
             <section>
               <div className="overflow-x-auto">
-                <table className="min-w-[1400px] w-full bg-white shadow rounded-lg overflow-hidden">
+                <table className="w-full bg-white shadow rounded-lg overflow-hidden">
                   <thead className="bg-gray-100 text-sm">
                     <tr>
-                      <th className="px-4 py-2 text-left">Timestamp</th>
-                      <th className="px-4 py-2 text-left">First Name</th>
-                      <th className="px-4 py-2 text-left">Last Name</th>
-                      <th className="px-4 py-2 text-left">Prompt</th>
-                      <th className="px-4 py-2 text-left">Pass/Fail</th>
-                      <th className="px-4 py-2 text-left">Evaluation Feedback</th>
-                      <th className="px-4 py-2 text-left">Facilitator Feedback</th>
-                      <th className="px-4 py-2"></th>
+                      <th className="px-2 py-2 text-left max-w-xs w-28 text-left">Timestamp</th>
+                      <th className="px-2 py-2 text-left max-w-xs w-24 text-left">First Name</th>
+                      <th className="px-2 py-2 text-left max-w-xs w-24 text-left">Last Name</th>
+                      <th className="px-2 py-2 text-left max-w-sm w-48 text-left">Prompt</th>
+                      <th className="px-2 py-2 text-left max-w-xs w-20 text-left">Pass/Fail</th>
+                      <th className="px-2 py-2 text-left max-w-xs w-80 text-left">Evaluation Feedback</th>
+                      <th className="px-2 py-2 text-left max-w-sm w-80 text-left">Facilitator Feedback</th>
+                      <th className="px-2 py-2"></th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
                     {records.map(r => editingId === r.id ? (
                       <tr key={r.id} className="border-t bg-yellow-50 fade-in">
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">
-                          <input value={editRec.firstName} onChange={e => handleEditChange('firstName', e.target.value)} className="border rounded px-2 py-1 w-24" />
+                        <td className="px-2 py-2 align-top whitespace-nowrap max-w-xs w-32">
+                          {adjustDate(r.timestamp)}                    
                         </td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">
-                          <input value={editRec.lastName} onChange={e => handleEditChange('lastName', e.target.value)} className="border rounded px-2 py-1 w-24" />
+                        <td className="px-2 py-2 align-top whitespace-nowrap">
+                          <input value={editRec.firstname} onChange={e => handleEditChange('firstname', e.target.value)} className="border rounded px-2 py-1 w-24" />
                         </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
+                        <td className="px-2 py-2 align-top whitespace-nowrap">
+                          <input value={editRec.lastname} onChange={e => handleEditChange('lastname', e.target.value)} className="border rounded px-2 py-1 w-24" />
+                        </td>
+                        <td className="px-2 py-2 align-top max-w-lg">
                           <textarea value={editRec.prompt} onChange={e => handleEditChange('prompt', e.target.value)} className="border rounded px-2 py-1 w-64" />
                         </td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap font-semibold">
+                        <td className="px-2 py-2 align-top whitespace-nowrap font-semibold">
                           {(() => {
                             const val = (editRec.notes || '').trim();
                             // Match both curly and straight apostrophe, with or without exclamation, and allow whitespace
@@ -253,26 +179,28 @@
                             );
                           })()}
                         </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <textarea value={editRec.notes} onChange={e => handleEditChange('notes', e.target.value)} className="border rounded px-2 py-1 w-64" />
+                        <td className="px-2 py-2 align-top max-w-xs w-48">
+                          <textarea value={editRec.notes} onChange={e => handleEditChange('notes', e.target.value)} className="border rounded px-2 py-1 w-48" style={{maxWidth:'12rem'}} />
                         </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <textarea value={editRec.facilitatorFeedback} onChange={e => handleEditChange('facilitatorFeedback', e.target.value)} className="border rounded px-2 py-1 w-64" />
+                        <td className="px-2 py-2 align-top max-w-lg">
+                          <textarea value={editRec.facilitatorfeedback} onChange={e => handleEditChange('facilitatorfeedback', e.target.value)} className="border rounded px-2 py-1 w-64" />
                         </td>
-                        <td className="px-4 py-2 align-top text-right">
+                        <td className="px-2 py-2 align-top text-right">
                           <button onClick={handleEditSave} className="text-green-600 hover:underline text-xs mr-2">Save</button>
                           <button onClick={handleEditCancel} className="text-gray-600 hover:underline text-xs">Cancel</button>
                         </td>
                       </tr>
                     ) : (
                       <tr key={r.id} className="border-t hover:bg-gray-50 fade-in">
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.firstName || '—'}</td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap">{r.lastName || '—'}</td>
-                        <td className="px-4 py-2 align-top max-w-lg">
+                        <td className="px-2 py-2 align-top whitespace-nowrap">
+                          {adjustDate(r.timestamp)}
+                        </td>
+                        <td className="px-2 py-2 align-top whitespace-nowrap">{r.firstname || '—'}</td>
+                        <td className="px-2 py-2 align-top whitespace-nowrap">{r.lastname || '—'}</td>
+                        <td className="px-2 py-2 align-top max-w-lg">
                           <pre className="whitespace-pre-wrap break-words">{r.prompt}</pre>
                         </td>
-                        <td className="px-4 py-2 align-top whitespace-nowrap font-semibold">
+                        <td className="px-2 py-2 align-top whitespace-nowrap font-semibold">
                           {(() => {
                             const val = (r.notes || '').trim();
                             const failRe = /^Let['’]s try again!?/;
@@ -283,14 +211,15 @@
                             );
                           })()}
                         </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
+                        <td className="px-2 py-2 align-top max-w-lg">
                           <pre className="whitespace-pre-wrap break-words">{r.notes}</pre>
                         </td>
-                        <td className="px-4 py-2 align-top max-w-lg">
-                          <pre className="whitespace-pre-wrap break-words">{r.facilitatorFeedback}</pre>
+                        <td className="px-2 py-2 align-top max-w-lg">
+                          <pre className="whitespace-pre-wrap break-words">{r.facilitatorfeedback}</pre>
                         </td>
-                        <td className="px-4 py-2 align-top text-right">
+                        <td className="px-2 py-2 align-top text-center">
                           <button onClick={() => handleEdit(r)} className="text-blue-600 hover:underline text-xs mr-2">Edit</button>
+                          <br></br>
                           <button onClick={() => handleDelete(r.id)} className="text-red-600 hover:underline text-xs">Delete</button>
                         </td>
                       </tr>
@@ -301,7 +230,7 @@
             </section>
 
             <footer className="mt-12 text-xs text-gray-400 text-center">
-              <p>Data is stored in the server database or browser localStorage depending on mode. Deleting here removes the record from the current storage.</p>
+              <p>Data is stored in a PostgreSQL database.</p>
             </footer>
           </div>
         );

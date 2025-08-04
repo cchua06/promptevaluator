@@ -8,6 +8,17 @@ A web app that can be used to provide custom feedback to evaluate user prompts t
 
 ## Usage
 
+Create a .env file in your clone repository. It should contain the following fields:
+
+```
+OPENAI_API_KEY=
+PGHOST=
+PGUSER=
+PGPASSWORD=
+PGDATABASE=
+PGPORT=
+```
+
 Run:
 
 ```

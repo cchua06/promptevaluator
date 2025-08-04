@@ -1,17 +1,40 @@
 // Toggle for localStorage mode (true = use localStorage in browser, false = use Postgres)
-const USE_LOCAL_STORAGE = true;
-
+const USE_LOCAL_STORAGE = false; // Set to false to use Postgres
+require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const morgan = require('morgan');
-const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = process.env.ROOT_DIR || process.cwd();
-const { Pool } = require('pg');
+const { Pool, Client } = require('pg');
 
+// Postgres connection
+const pool = new Pool();
 
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS prompts (
+        id UUID PRIMARY KEY,
+        timestamp TEXT,
+        firstname TEXT,
+        lastname  TEXT,
+        prompt    TEXT,
+        notes     TEXT,
+        facilitatorfeedback TEXT
+      );
+    `);
+    console.log('Connected to Postgres');
+  } catch (err) {
+    console.error('Postgres init error:', err);
+    process.exit(1);
+  }
+})();
+
+// ---- OpenAI API Key (now loaded from .env) ----
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // Expose storage mode to frontend
 app.get('/api/storage-mode', (req, res) => {
@@ -94,34 +117,15 @@ app.post('/api/facilitator-feedback', async (req, res) => {
   }
 });
 
-// Postgres endpoints
-// Set your Postgres connection string here or use an environment variable
-const PG_CONNECTION_STRING = process.env.PG_CONNECTION_STRING || 'postgres://username:password@localhost:5432/yourdb';
-const pool = new Pool({ connectionString: PG_CONNECTION_STRING });
-
-/*
-// Ensure table exists (run once at startup)
-pool.query(`
-  CREATE TABLE IF NOT EXISTS prompt_records (
-    id UUID PRIMARY KEY,
-    timestamp TEXT,
-    firstName TEXT,
-    lastName TEXT,
-    prompt TEXT,
-    notes TEXT,
-    facilitatorFeedback TEXT
-  )
-`).catch(console.error);
-*/
 
 // API: Save a new record
 app.post('/api/record', async (req, res) => {
-  const { id, timestamp, firstName, lastName, prompt, notes, facilitatorFeedback } = req.body;
+  const { id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback } = req.body;
   try {
     await pool.query(
-      `INSERT INTO prompt_records (id, timestamp, firstName, lastName, prompt, notes, facilitatorFeedback)
+      `INSERT INTO prompts (id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, timestamp, firstName, lastName, prompt, notes, facilitatorFeedback]
+      [id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback]
     );
     res.json({ success: true });
   } catch (err) {
@@ -133,7 +137,8 @@ app.post('/api/record', async (req, res) => {
 // API: Get all records
 app.get('/api/records', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM prompt_records ORDER BY timestamp DESC');
+    const result = await pool.query('SELECT * FROM prompts ORDER BY timestamp DESC');
+    console.log(result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching records:', err);
@@ -144,7 +149,7 @@ app.get('/api/records', async (req, res) => {
 // API: Delete a record
 app.delete('/api/record/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM prompt_records WHERE id = $1', [req.params.id]);
+    await pool.query('DELETE FROM prompts WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting record:', err);
@@ -154,11 +159,11 @@ app.delete('/api/record/:id', async (req, res) => {
 
 // API: Edit a record (admin only)
 app.put('/api/record/:id', async (req, res) => {
-  const { firstName, lastName, prompt, notes, facilitatorFeedback } = req.body;
+  const { firstname, lastname, prompt, notes, facilitatorfeedback } = req.body;
   try {
     await pool.query(
-      `UPDATE prompt_records SET firstName=$1, lastName=$2, prompt=$3, notes=$4, facilitatorFeedback=$5 WHERE id=$6`,
-      [firstName, lastName, prompt, notes, facilitatorFeedback, req.params.id]
+      `UPDATE prompts SET firstname=$1, lastname=$2, prompt=$3, notes=$4, facilitatorfeedback=$5 WHERE id=$6`,
+      [firstname, lastname, prompt, notes, facilitatorfeedback, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
