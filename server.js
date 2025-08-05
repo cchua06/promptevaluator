@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = process.env.ROOT_DIR || process.cwd();
 const { Pool, Client } = require('pg');
+const { time } = require('console');
 
 // Postgres connection
 const pool = new Pool();
@@ -138,7 +139,6 @@ app.post('/api/record', async (req, res) => {
 app.get('/api/records', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM prompts ORDER BY timestamp DESC');
-    console.log(result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching records:', err);

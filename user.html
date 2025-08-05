@@ -218,14 +218,13 @@
           const ts = new Date().toISOString();
           const newRec = {
             id: crypto.randomUUID(),
-            ts,
+            timestamp: ts,
             firstname: firstName.trim(),
             lastname: lastName.trim(),
-            prompt,
-            notes,
+            prompt: prompt,
+            notes: notes,
             facilitatorfeedback: facilitatorFeedback
           };
-          console.log(newRec);
           if (USE_LOCAL_STORAGE) {
             saveRecordLocal(newRec);
             setRecords(prev => [newRec, ...prev]);
