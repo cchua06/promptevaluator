@@ -1,0 +1,21 @@
+services:
+  prompt-evaluator:
+    build: .
+    container_name: prompt-evaluator-app
+    network_mode: host
+    environment:
+      # OpenAI API Key (required)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Database Configuration
+      - PGHOST=localhost
+      - PGUSER=${PGUSER:-postgres}
+      - PGPASSWORD=${PGPASSWORD}
+      - PGDATABASE=${PGDATABASE:-prompt_evaluator}
+      - PGPORT=${PGPORT:-5432}
+      
+      # Application Configuration
+      - NODE_ENV=production
+      - PORT=3000
+      - ROOT_DIR=/app
+    restart: unless-stopped 
