@@ -19,7 +19,7 @@ jobs:
     - name: Setup Google Cloud CLI
       uses: google-github-actions/setup-gcloud@v2
       with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        project_id: $(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")
 
     - name: Configure Docker for Artifact Registry
       run: |
@@ -29,56 +29,43 @@ jobs:
       run: |
         ACCESS_TOKEN=$(gcloud auth print-access-token)
         curl -v -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-          https://us-central1-docker.pkg.dev/v2/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/tags/list || true
+          https://us-central1-docker.pkg.dev/v2/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/tags/list || true
 
     - name: Build and push Docker image
       run: |
-        IMAGE_TAG=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:${{ github.sha }}
+        IMAGE_TAG=us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:${{ github.sha }}
         docker build -t $IMAGE_TAG .
         docker push $IMAGE_TAG
 
         # Also tag as latest
-        LATEST_TAG=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:latest
+        LATEST_TAG=us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest
         docker tag $IMAGE_TAG $LATEST_TAG
         docker push $LATEST_TAG
 
-    - name: Create environment file (escaped)
-      run: |
-        {
-          printf "OPENAI_API_KEY=%q\n" "${{ secrets.OPENAI_API_KEY }}"
-          printf "PGHOST=%q\n" "localhost"
-          printf "PGUSER=%q\n" "postgres"
-          printf "PGPASSWORD=%q\n" "${{ secrets.CLOUDSQL_PASSWORD }}"
-          printf "PGDATABASE=%q\n" "prompt-evaluator-db"
-          printf "PGPORT=%q\n" "5432"
-        } > .env
-
-    - name: Upload environment file to VM
-      run: |
-        gcloud compute scp .env ${{ secrets.VM_INSTANCE_NAME }}:~/promptevaluator/ --zone=${{ secrets.VM_ZONE }}
-
     - name: Deploy application
       run: |
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
           cd ~/promptevaluator
           docker-compose down
-          docker pull us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:latest
+          docker pull us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest
+          OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") \
+          PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") \
           docker-compose up -d
           docker-compose ps
         "
 
     - name: Restart Cloudflare tunnel
       run: |
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
           docker stop cloudflare-tunnel 2>/dev/null || true
           docker rm cloudflare-tunnel 2>/dev/null || true
-          docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")
         "
 
     - name: Health check
       run: |
         sleep 30  # Wait for application to start
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
           cd ~/promptevaluator
           docker-compose ps
           docker-compose logs --tail=20
@@ -88,5 +75,5 @@ jobs:
       run: |
         echo "🚀 Deployment completed!"
         echo "📊 Application URL: https://prompt-checker.tm8.dev"
-        echo "🔧 VM Instance: ${{ secrets.VM_INSTANCE_NAME }}"
+        echo "🔧 VM Instance: $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME")"
         echo "📝 Commit: ${{ github.sha }}"
