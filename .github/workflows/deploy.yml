@@ -28,13 +28,27 @@ jobs:
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && rm -rf promptevaluator"
         gcloud compute scp --recurse . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
+    - name: Create .env file on VM
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") \
+          --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") \
+          --command='
+            cd ~/promptevaluator &&
+            echo "OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=OPENAI_API_KEY)" > .env &&
+            echo "PGHOST=localhost" >> .env &&
+            echo "PGUSER=postgres" >> .env &&
+            echo "PGPASSWORD=\"$(gcloud secrets versions access latest --secret=CLOUDSQL_PASSWORD)\"" >> .env &&
+            echo "PGDATABASE=prompt-evaluator-db" >> .env &&
+            echo "PGPORT=5432" >> .env
+          '
+
     - name: Stop containers
       run: |
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down"
 
-    - name: Start containers with secrets
+    - name: Start containers
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") docker-compose up -d --build"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose up -d --build"
 
     - name: Check container status
       run: |
