@@ -44,14 +44,12 @@ jobs:
 
     - name: Create environment file
       run: |
-        cat <<EOF > .env
-        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-        PGHOST="localhost"
-        PGUSER="postgres"
-        PGPASSWORD="${{ secrets.CLOUDSQL_PASSWORD }}"
-        PGDATABASE="prompt-evaluator-db"
-        PGPORT="5432"
-        EOF
+        printf "OPENAI_API_KEY=%s\n" "${{ secrets.OPENAI_API_KEY }}" > .env
+        printf "PGHOST=localhost\n" >> .env
+        printf "PGUSER=postgres\n" >> .env
+        printf "PGPASSWORD=%s\n" "${{ secrets.CLOUDSQL_PASSWORD }}" >> .env
+        printf "PGDATABASE=prompt-evaluator-db\n" >> .env
+        printf "PGPORT=5432\n" >> .env
 
     - name: Upload environment file to VM
       run: |
