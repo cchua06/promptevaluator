@@ -18,77 +18,57 @@ jobs:
 
     - name: Setup Google Cloud CLI
       uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Configure Docker for Artifact Registry
+    - name: Set project from Secret Manager
       run: |
-        gcloud auth configure-docker us-central1-docker.pkg.dev
+        gcloud config set project $(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")
 
-    - name: 🧪 Test Artifact Registry access
+    - name: Upload code to VM
       run: |
-        ACCESS_TOKEN=$(gcloud auth print-access-token)
-        curl -v -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-          https://us-central1-docker.pkg.dev/v2/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/tags/list || true
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && rm -rf promptevaluator"
+        gcloud compute scp --recurse . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
-    - name: Build and push Docker image
+    - name: Create .env file locally
       run: |
-        IMAGE_TAG=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:${{ github.sha }}
-        docker build -t $IMAGE_TAG .
-        docker push $IMAGE_TAG
+        echo "OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY")" > .env
+        echo "PGHOST=localhost" >> .env
+        echo "PGUSER=postgres" >> .env
+        echo "PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD")" >> .env
+        echo "PGDATABASE=prompt-evaluator-db" >> .env
+        echo "PGPORT=5432" >> .env
 
-        # Also tag as latest
-        LATEST_TAG=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:latest
-        docker tag $IMAGE_TAG $LATEST_TAG
-        docker push $LATEST_TAG
-
-    - name: Create environment file
+    - name: Upload .env file to VM
       run: |
-        # Create .env file with proper handling for JSON content
-        {
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
-          echo "PGHOST=localhost"
-          echo "PGUSER=postgres"
-          echo "PGPASSWORD=${{ secrets.CLOUDSQL_PASSWORD }}"
-          echo "PGDATABASE=prompt-evaluator-db"
-          echo "PGPORT=5432"
-        } > .env
-        
+        gcloud compute scp .env $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
-    - name: Upload environment file to VM
+    - name: Debug .env file
       run: |
-        gcloud compute scp .env ${{ secrets.VM_INSTANCE_NAME }}:~/promptevaluator/ --zone=${{ secrets.VM_ZONE }}
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
 
-    - name: Deploy application
+    - name: Stop containers
       run: |
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
-          cd ~/promptevaluator
-          docker-compose down
-          docker pull us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/prompt-evaluator-artifact-repository/prompt-evaluator:latest
-          docker-compose up -d
-          docker-compose ps
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down"
+
+    - name: Start containers
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose up -d --build"
+
+    - name: Check container status
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps"
 
     - name: Restart Cloudflare tunnel
       run: |
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
-          docker stop cloudflare-tunnel 2>/dev/null || true
-          docker rm cloudflare-tunnel 2>/dev/null || true
-          docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker stop cloudflare-tunnel 2>/dev/null || true && docker rm cloudflare-tunnel 2>/dev/null || true && docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")"
 
     - name: Health check
       run: |
         sleep 30  # Wait for application to start
-        gcloud compute ssh ${{ secrets.VM_INSTANCE_NAME }} --zone=${{ secrets.VM_ZONE }} --command="
-          cd ~/promptevaluator
-          docker-compose ps
-          docker-compose logs --tail=20
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps && docker-compose logs --tail=20"
 
     - name: Deployment status
       run: |
         echo "🚀 Deployment completed!"
         echo "📊 Application URL: https://prompt-checker.tm8.dev"
-        echo "🔧 VM Instance: ${{ secrets.VM_INSTANCE_NAME }}"
+        echo "🔧 VM Instance: $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME")"
         echo "📝 Commit: ${{ github.sha }}"

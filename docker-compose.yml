@@ -11,7 +11,7 @@ services:
       - PGHOST=localhost
       - PGUSER=${PGUSER:-postgres}
       - PGPASSWORD=${PGPASSWORD}
-      - PGDATABASE=${PGDATABASE:-prompt_evaluator}
+      - PGDATABASE=${PGDATABASE:-prompt-evaluator-db}
       - PGPORT=${PGPORT:-5432}
       
       # Application Configuration
