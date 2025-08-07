@@ -44,12 +44,12 @@ jobs:
 
     - name: Create environment file
       run: |
-        # Create .env file with proper handling for JSON content
+        # Safely create .env file with secrets properly quoted
         {
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
+          echo "OPENAI_API_KEY=\"${{ secrets.OPENAI_API_KEY }}\""
           echo "PGHOST=localhost"
           echo "PGUSER=postgres"
-          echo "PGPASSWORD=${{ secrets.CLOUDSQL_PASSWORD }}"
+          echo "PGPASSWORD=\"${{ secrets.CLOUDSQL_PASSWORD }}\""
           echo "PGDATABASE=prompt-evaluator-db"
           echo "PGPORT=5432"
         } > .env
