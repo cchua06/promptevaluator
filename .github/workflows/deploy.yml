@@ -42,14 +42,16 @@ jobs:
         docker tag $IMAGE_TAG $LATEST_TAG
         docker push $LATEST_TAG
 
-    - name: Create environment file
+    - name: Create environment file (escaped)
       run: |
-        printf "OPENAI_API_KEY=%s\n" "${{ secrets.OPENAI_API_KEY }}" > .env
-        printf "PGHOST=localhost\n" >> .env
-        printf "PGUSER=postgres\n" >> .env
-        printf "PGPASSWORD=%s\n" "${{ secrets.CLOUDSQL_PASSWORD }}" >> .env
-        printf "PGDATABASE=prompt-evaluator-db\n" >> .env
-        printf "PGPORT=5432\n" >> .env
+        {
+          printf "OPENAI_API_KEY=%q\n" "${{ secrets.OPENAI_API_KEY }}"
+          printf "PGHOST=%q\n" "localhost"
+          printf "PGUSER=%q\n" "postgres"
+          printf "PGPASSWORD=%q\n" "${{ secrets.CLOUDSQL_PASSWORD }}"
+          printf "PGDATABASE=%q\n" "prompt-evaluator-db"
+          printf "PGPORT=%q\n" "5432"
+        } > .env
 
     - name: Upload environment file to VM
       run: |
