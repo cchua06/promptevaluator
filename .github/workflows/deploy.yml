@@ -47,6 +47,7 @@ jobs:
     - name: Deploy application
       run: |
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
           cd ~/promptevaluator
           docker-compose down
           docker pull us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest
