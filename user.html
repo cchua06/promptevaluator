@@ -59,7 +59,7 @@ Output format
 
 If any component is Missing:
 
-Let’s enhance this! 🧓
+Let’s try again! 🤓
 
 Missing components: [List any of: Task, Input, Steps, Output]
 
@@ -121,24 +121,23 @@ Keep feedback concise—focus only on what matters for prompt structure.
         const systemInstructions = `
 Your task is to generate structured support content to help the facilitator guide the participant toward a better prompt.
 
-Inputs:
-Prompt:
-<prompt>
+Inputs:Prompt:
 
 Evaluation:
-<evaluation>
 
 Your output must follow this format:
 
 Task Summary:
-
 Summarize what the participant is trying to achieve based on their prompt. Use the evaluation only to clarify what’s missing or weak—don’t just restate it. Write 1–2 objective sentences. If the task is unclear, say so.
 
-Guidance:
-
-Write 2–5 bullet points that provide facilitator-facing guidance. These should be confident, actionable suggestions—not questions. Focus on moving the participant forward based on what’s wrong, as indicated in the evaluation. Avoid direct criticism or prompt rewrites.
-
 Be use-case specific when possible: e.g., suggest uploading a file, clarifying audience, giving example inputs, or breaking the task into steps.
+
+Always include this as the final bullet:
+
+Ensure there's a source: an online link, uploaded file (e.g. agenda, program), or concise input directly in the prompt.
+
+Mitigation Strategies:
+List 1–3 specific, proactive strategies the participant can use to avoid similar issues in future prompts. These should be generalizable, forward-looking best practices (e.g., “Start by identifying your audience,” or “Always include a clear outcome or deliverable.”). Use bullet points.
         `;
 
         try {
