@@ -25,7 +25,9 @@ jobs:
 
     - name: Upload code to VM
       run: |
-        gcloud compute scp --recurse --exclude=".git" --exclude="node_modules" . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+        tar --exclude='.git' --exclude='node_modules' --exclude='.github' -czf deploy.tar.gz .
+        gcloud compute scp deploy.tar.gz $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && rm -rf promptevaluator && tar -xzf deploy.tar.gz -C ~ && mv promptevaluator promptevaluator-new && mv promptevaluator-new promptevaluator && rm deploy.tar.gz"
 
     - name: Deploy application
       run: |
