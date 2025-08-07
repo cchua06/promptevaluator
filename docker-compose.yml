@@ -1,6 +1,6 @@
 services:
   prompt-evaluator:
-    build: .
+    image: us-central1-docker.pkg.dev/promptevaluator-468202/prompt-evaluator-artifact-repository/prompt-evaluator:latest
     container_name: prompt-evaluator-app
     network_mode: host
     environment:
