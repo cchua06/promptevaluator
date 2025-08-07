@@ -25,7 +25,7 @@ jobs:
 
     - name: Upload code to VM
       run: |
-        gcloud compute scp --recurse . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+        gcloud compute scp --recurse --exclude=".git" --exclude="node_modules" . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
     - name: Deploy application
       run: |
