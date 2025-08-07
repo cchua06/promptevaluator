@@ -33,13 +33,17 @@ jobs:
         echo "OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY")" > .env
         echo "PGHOST=localhost" >> .env
         echo "PGUSER=postgres" >> .env
-        echo "PGPASSWORD=\"$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD")\"" >> .env
+        echo "PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD")" >> .env
         echo "PGDATABASE=prompt-evaluator-db" >> .env
         echo "PGPORT=5432" >> .env
 
     - name: Upload .env file to VM
       run: |
         gcloud compute scp .env $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+
+    - name: Debug .env file
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
 
     - name: Stop containers
       run: |
