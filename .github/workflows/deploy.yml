@@ -36,6 +36,7 @@ jobs:
         echo "PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD")" >> .env
         echo "PGDATABASE=prompt-evaluator-db" >> .env
         echo "PGPORT=5432" >> .env
+        echo "CLIENT_ADMIN_PASS=$(gcloud secrets versions access latest --secret="CLIENT_ADMIN_PASS")" >> .env
 
     - name: Upload .env file to VM
       run: |
