@@ -27,12 +27,6 @@ jobs:
       run: |
         gcloud auth configure-docker us-central1-docker.pkg.dev
 
-    - name: 🧪 Test Artifact Registry access
-      run: |
-        ACCESS_TOKEN=$(gcloud auth print-access-token)
-        curl -v -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-          https://us-central1-docker.pkg.dev/v2/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/tags/list || true
-
     - name: Build and push Docker image
       run: |
         IMAGE_TAG=us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:${{ github.sha }}
@@ -46,33 +40,16 @@ jobs:
 
     - name: Deploy application
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
-          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-          cd ~/promptevaluator
-          docker-compose down
-          docker pull us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest
-          OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") \
-          PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") \
-          docker-compose up -d
-          docker-compose ps
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down && docker pull us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest && OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") docker-compose up -d && docker-compose ps"
 
     - name: Restart Cloudflare tunnel
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
-          docker stop cloudflare-tunnel 2>/dev/null || true
-          docker rm cloudflare-tunnel 2>/dev/null || true
-          docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker stop cloudflare-tunnel 2>/dev/null || true && docker rm cloudflare-tunnel 2>/dev/null || true && docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")"
 
     - name: Health check
       run: |
         sleep 30  # Wait for application to start
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="
-          cd ~/promptevaluator
-          docker-compose ps
-          docker-compose logs --tail=20
-        "
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps && docker-compose logs --tail=20"
 
     - name: Deployment status
       run: |
