@@ -23,48 +23,17 @@ jobs:
       run: |
         gcloud config set project $(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")
 
-    - name: Configure Docker for Artifact Registry
+    - name: Upload code to VM
       run: |
-        gcloud auth configure-docker us-central1-docker.pkg.dev
+        gcloud compute scp --recurse . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
-    - name: Build and push Docker image
+    - name: Deploy application
       run: |
-        IMAGE_TAG=us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:${{ github.sha }}
-        docker build -t $IMAGE_TAG .
-        docker push $IMAGE_TAG
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down && docker-compose up -d --build && docker-compose ps"
 
-        # Also tag as latest
-        LATEST_TAG=us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest
-        docker tag $IMAGE_TAG $LATEST_TAG
-        docker push $LATEST_TAG
-
-    - name: Stop existing containers
+    - name: Restart Cloudflare tunnel
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down"
-
-    - name: Pull latest image
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker pull us-central1-docker.pkg.dev/$(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")/prompt-evaluator-artifact-repository/prompt-evaluator:latest"
-
-    - name: Start application
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") docker-compose up -d"
-
-    - name: Check application status
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps"
-
-    - name: Stop Cloudflare tunnel
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker stop cloudflare-tunnel 2>/dev/null || true"
-
-    - name: Remove Cloudflare tunnel
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker rm cloudflare-tunnel 2>/dev/null || true"
-
-    - name: Start Cloudflare tunnel
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker stop cloudflare-tunnel 2>/dev/null || true && docker rm cloudflare-tunnel 2>/dev/null || true && docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token $(gcloud secrets versions access latest --secret="CLOUDFLARE_TUNNEL_TOKEN")"
 
     - name: Health check
       run: |
