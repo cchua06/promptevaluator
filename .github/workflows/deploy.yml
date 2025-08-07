@@ -28,9 +28,17 @@ jobs:
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && rm -rf promptevaluator"
         gcloud compute scp --recurse . $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
-    - name: Deploy application
+    - name: Stop containers
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down && OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") docker-compose up -d --build && docker-compose ps"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down"
+
+    - name: Start containers with secrets
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY") PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD") docker-compose up -d --build"
+
+    - name: Check container status
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps"
 
     - name: Restart Cloudflare tunnel
       run: |
