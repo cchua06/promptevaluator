@@ -15,16 +15,50 @@ A web app that can be used to provide custom feedback to evaluate user prompts t
    - VM instance running Ubuntu 22.04 LTS
    - Cloud SQL instance (PostgreSQL)
    - VPC network with firewall rules
+   - Secret Manager enabled
 
 2. **Required Credentials:**
-   - GCP Service Account key (JSON file)
-   - Cloud SQL password
-   - OpenAI API key
-   - Cloudflare tunnel token
+   - GCP Service Account key (JSON file) - stored in GitHub Secrets
+   - All other secrets stored in Google Cloud Secret Manager
 
-### Deployment Steps
+### Security Considerations ⚠️
 
-#### 1. **VM Setup**
+#### **Firewall Configuration**
+- **Current**: SSH access open to 0.0.0.0/0 (insecure/bad)
+- **Recommendation**: Restrict to specific IP ranges
+```bash
+# Update firewall rules to restrict SSH access
+gcloud compute firewall-rules update prompt-evaluator-vpc-allow-app \
+    --source-ranges=YOUR_OFFICE_IP/32,YOUR_HOME_IP/32
+```
+
+#### **Service Account Permissions**
+The deployment uses a service account with minimal required roles:
+- **Secret Manager Secret Accessor** - Access secrets
+- **Cloud SQL Client** - Database connection
+- **Compute Instance Admin (v1)** - VM operations
+- **Service Account User** - SSH access
+
+### Automated Deployment Setup
+
+#### 1. **GitHub Repository Configuration**
+```bash
+# Add these secrets to your GitHub repository (Settings > Secrets and variables > Actions):
+GCP_SA_KEY=your_service_account_json_key
+```
+
+#### 2. **Google Cloud Secret Manager Setup**
+```bash
+# Create secrets in Secret Manager
+gcloud secrets create GCP_PROJECT_ID --replication-policy="automatic"
+gcloud secrets create VM_INSTANCE_NAME --replication-policy="automatic"
+gcloud secrets create VM_ZONE --replication-policy="automatic"
+gcloud secrets create OPENAI_API_KEY --replication-policy="automatic"
+gcloud secrets create CLOUDSQL_PASSWORD --replication-policy="automatic"
+gcloud secrets create CLOUDFLARE_TUNNEL_TOKEN --replication-policy="automatic"
+```
+
+#### 3. **VM Setup (One-time)**
 ```bash
 # Create VM instance (if not exists)
 gcloud compute instances create instance-20250806-051331 \
@@ -34,9 +68,14 @@ gcloud compute instances create instance-20250806-051331 \
     --image-project=ubuntu-os-cloud \
     --tags=http-server,https-server \
     --boot-disk-size=20GB
+
+# Enable OS Login for secure SSH access
+gcloud compute instances add-metadata instance-20250806-051331 \
+    --zone=us-central1-c \
+    --metadata enable-oslogin=TRUE
 ```
 
-#### 2. **Firewall Rules**
+#### 4. **Firewall Rules**
 ```bash
 # Allow HTTP traffic for webapp
 gcloud compute firewall-rules create prompt-evaluator-vpc-allow-app \
@@ -44,41 +83,13 @@ gcloud compute firewall-rules create prompt-evaluator-vpc-allow-app \
     --allow=tcp:3000 \
     --source-ranges=0.0.0.0/0 \
     --description="Allow access to prompt evaluator webapp"
+
+# ⚠️ SECURITY: Restrict SSH access to specific IPs
+gcloud compute firewall-rules update prompt-evaluator-vpc-allow-app \
+    --source-ranges=YOUR_OFFICE_IP/32,YOUR_HOME_IP/32
 ```
 
-#### 3. **Upload Application Code**
-```bash
-# Upload code to VM
-gcloud compute scp --recurse . luis@instance-20250806-051331:~/promptevaluator --zone=us-central1-c
-```
-
-#### 4. **SSH into VM and Setup**
-```bash
-# SSH into VM
-gcloud compute ssh instance-20250806-051331 --zone=us-central1-c
-
-# Navigate to project
-cd ~/promptevaluator
-
-# Copy environment template
-cp env.example .env
-
-# Edit environment variables
-nano .env
-```
-
-#### 5. **Environment Configuration**
-Create `.env` file with:
-```
-OPENAI_API_KEY=your_openai_api_key_here
-PGHOST=localhost
-PGUSER=postgres
-PGPASSWORD=your_cloudsql_password_here
-PGDATABASE=prompt-evaluator-db
-PGPORT=5432
-```
-
-#### 6. **Database Setup**
+#### 5. **Database Setup (One-time)**
 ```bash
 # Install PostgreSQL client
 sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -90,7 +101,7 @@ psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE \"prompt-e
 psql -h localhost -p 5432 -U postgres -d "prompt-evaluator-db" -f create_schema.sql
 ```
 
-#### 7. **Install Docker and Deploy**
+#### 6. **Install Docker (One-time)**
 ```bash
 # Install Docker
 sudo apt-get install -y docker.io docker-compose
@@ -98,13 +109,9 @@ sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker $USER
 newgrp docker
-
-# Deploy application
-chmod +x deploy.sh
-./deploy.sh
 ```
 
-#### 8. **Start Cloud SQL Proxy**
+#### 7. **Start Cloud SQL Proxy (Manual - Required)**
 In a separate terminal session:
 ```bash
 # SSH into VM
@@ -114,15 +121,26 @@ gcloud compute ssh instance-20250806-051331 --zone=us-central1-c
 cloud-sql-proxy --private-ip --credentials-file=promptevaluator-468202-6f26e405c4.json promptevaluator-468202:us-central1:prompt-evaluator-prod
 ```
 
-#### 9. **Setup Cloudflare Tunnel**
-```bash
-# Start Cloudflare tunnel with host networking
-docker run -d --network host --name cloudflare-tunnel cloudflare/cloudflared:latest tunnel --no-autoupdate run --token YOUR_TUNNEL_TOKEN
-```
+### Automated Deployment
 
-### Redeployment
+#### **Deploy via GitHub Actions**
+1. Go to your GitHub repository
+2. Navigate to "Actions" tab
+3. Select "Deploy to GCP VM" workflow
+4. Click "Run workflow" > "Run workflow"
 
-#### **Option 1: Using Redeploy Script (Recommended)**
+#### **What the Automated Deployment Does:**
+1. ✅ **Authenticates** with Google Cloud using service account
+2. ✅ **Uploads code** to VM (excludes .git and node_modules)
+3. ✅ **Creates .env file** with secrets from Secret Manager
+4. ✅ **Stops existing containers** with `docker-compose down`
+5. ✅ **Builds and starts containers** with `docker-compose up -d --build`
+6. ✅ **Restarts Cloudflare tunnel** for external access
+7. ✅ **Health checks** the deployment
+
+### Manual Redeployment
+
+#### **Option 1: Using Redeploy Script**
 ```bash
 # From your local machine
 ./redeploy.sh
@@ -168,7 +186,7 @@ docker logs cloudflare-tunnel
 
 #### **Database Connection Issues**
 - Ensure Cloud SQL proxy is running in a separate terminal
-- Verify `.env` file has correct database credentials
+- Verify `.env` file has correct database credentials (auto-generated by deployment)
 - Check if database exists: `psql -h localhost -p 5432 -U postgres -d "prompt-evaluator-db" -c "\dt"`
 
 #### **Network Issues**
@@ -179,12 +197,18 @@ docker logs cloudflare-tunnel
 - Ensure tunnel is running with host networking: `docker run --network host ...`
 - Check tunnel logs: `docker logs cloudflare-tunnel`
 
-### Architecture
+#### **Deployment Issues**
+- Check GitHub Actions logs for detailed error messages
+- Verify all secrets exist in Secret Manager
+- Ensure service account has required IAM roles
 
-- **Frontend**: HTML/CSS/JavaScript (served by Express)
-- **Backend**: Node.js with Express
+### Deployment Architecture
+
 - **Database**: PostgreSQL (Cloud SQL)
 - **Container**: Docker with host networking
 - **Proxy**: Cloud SQL proxy for database connection
 - **Tunnel**: Cloudflare tunnel for external access
 - **Infrastructure**: GCP VM with VPC networking
+- **CI/CD**: GitHub Actions with automated deployment
+- **Secrets**: Google Cloud Secret Manager
+- **Security**: Service account with minimal IAM roles

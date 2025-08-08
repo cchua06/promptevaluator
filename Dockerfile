@@ -45,6 +45,9 @@ ENV PGPASSWORD=
 ENV PGDATABASE=prompt_evaluator
 ENV PGPORT=5432
 
+# ADMIN_PASS
+ENV CLIENT_ADMIN_PASS=
+
 # OpenAI API key (must be provided at runtime)
 ENV OPENAI_API_KEY=
 

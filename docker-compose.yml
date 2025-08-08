@@ -11,11 +11,14 @@ services:
       - PGHOST=localhost
       - PGUSER=${PGUSER:-postgres}
       - PGPASSWORD=${PGPASSWORD}
-      - PGDATABASE=${PGDATABASE:-prompt_evaluator}
+      - PGDATABASE=${PGDATABASE:-prompt-evaluator-db}
       - PGPORT=${PGPORT:-5432}
       
       # Application Configuration
       - NODE_ENV=production
       - PORT=3000
       - ROOT_DIR=/app
+
+      # ADMIN_PASS
+      - CLIENT_ADMIN_PASS=${CLIENT_ADMIN_PASS}
     restart: unless-stopped 
