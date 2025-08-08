@@ -25,75 +25,190 @@
 
     <script type="text/babel">
       // ---------------------------
+      // Helper Functions
+      // ---------------------------
+      
+      // Helper to format evaluation JSON into user-friendly format
+      function formatEvaluation(notesText) {
+        try {
+          const evalObj = JSON.parse(notesText);
+          
+          // Check if all components are present
+          const allPresent = evalObj.task === "present" && 
+                           evalObj.input === "present" && 
+                           evalObj.steps === "present" && 
+                           evalObj.output === "present";
+          
+          let result = allPresent ? "Amazing job! 🎉\n\n" : "Let's try again! 🤓\n\n";
+          
+          // Format each component with icon and explanation
+          const formatComponent = (name, status, explanation) => {
+            const icon = status === "present" ? "✅" : status === "improvement" ? "⚠️" : "❌";
+            const statusText = status === "present" ? "Present" : 
+                             status === "improvement" ? "Needs Improvement" : "Missing";
+            return `${icon} ${name} (${statusText}): ${explanation}`;
+          };
+          
+          result += formatComponent("Task", evalObj.task, evalObj.taskExplanation) + "\n\n";
+          result += formatComponent("Input", evalObj.input, evalObj.inputExplanation) + "\n\n";  
+          result += formatComponent("Steps", evalObj.steps, evalObj.stepsExplanation) + "\n\n";
+          result += formatComponent("Output", evalObj.output, evalObj.outputExplanation);
+          
+          // Add highlights if all components are present
+          if (allPresent && evalObj.highlights) {
+            result += "\n\n🌟 Highlights: " + evalObj.highlights;
+          }
+          
+          return result;
+        } catch (e) {
+          // If it's not JSON, return the original text
+          return notesText;
+        }
+      }
+
+      // ---------------------------
+      // Authentication Functions
+      // ---------------------------
+      
+      async function checkAuthStatus() {
+        try {
+          const res = await fetch('/api/auth-status');
+          const data = await res.json();
+          return data;
+        } catch (err) {
+          console.error('Error checking auth status:', err);
+          return { authenticated: false, isAdmin: false };
+        }
+      }
+
+      async function login(password) {
+        try {
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+          });
+          const data = await res.json();
+          return data;
+        } catch (err) {
+          console.error('Login error:', err);
+          return { error: 'Login failed' };
+        }
+      }
+
+      // ---------------------------
       // OpenAI Evaluator Function
       // ---------------------------
 
       async function evaluatePrompt(prompt) {
         // System instructions for the evaluator
         const systemInstructions = `
-SYSTEM PROMPT: Friendly Prompt Structure Reviewer
+SYSTEM PROMPT: Prompt Structure Reviewer
 
-You are a prompt-structure reviewer. Your job is to check whether a user’s prompt contains the four key building blocks of a well-structured prompt:
+You are a prompt-structure reviewer. Your job is to check whether the input prompt contains the four key building blocks of a well-structured prompt:
 
-Task – a clear action, defined deliverable, and intended audience.
+📌 Prompt Structure Components
 
-Input – the raw materials, context, or data sources the AI should rely on.
+Task – Define what you want the AI to accomplish
+Best Practices:
 
-Steps – a logically ordered process the AI should follow. This could be a numbered list, a bulleted list, or clearly sequenced instructions written in paragraph form.
+Start with an action verb: write, create, analyze, develop
 
-Output – formatting, tone, and structural expectations for the final answer.
+Be specific about the type of deliverable and target audience
 
-How to evaluate
+Avoid vague phrases like “help me with” or “something about”
+
+✅ Example: “Write a 500-word blog post for small business owners about cybersecurity best practices”
+❌ Example: “Help me with cybersecurity stuff for businesses”
+
+Input – Supply the raw materials or context the AI should use
+Best Practices:
+
+Provide specific sources, data, or background context
+
+Instruct the AI to cite and quote from provided materials
+
+Set strict boundaries: “Say ‘I don’t know’ if info isn’t available”
+
+Include 2–3 examples for complex or patterned tasks
+
+✅ Example instruction: “Use only the attached report. Do not add outside information.”
+✅ Example instruction: “Please quote from the user feedback below where relevant.”
+
+Steps – Define a logical flow or process for the AI to follow
+Best Practices:
+
+Ensure there is a clear sequence or progression of actions, even if not formatted as a list
+
+Look for signals of process or stage-based reasoning (e.g. “First… then… finally…”)
+
+Include decision points or clarifications if needed
+
+Avoid prompts that leap directly to the output without guiding how to get there
+
+✅ Example (structured):
+Ask clarifying questions about audience and tone
+Create an outline with 3–5 main points
+Draft a first version using the provided style guide
+
+✅ Example (narrative form):
+“Using the product feedback below, summarize the key themes, then write a follow-up message addressing them.”
+
+Output – Clarify the desired formatting and tone
+Best Practices:
+
+Describe the output format: paragraph, list, table, JSON, etc.
+
+Specify the tone: professional, concise, casual, persuasive, etc.
+
+Omit structural/layout expectations unless they are essential to the formatting
+
+✅ Example: “Respond in 3 bullet points using a friendly, informal tone”
+✅ Example: “Output should be a single JSON object with camelCase keys and a confident tone”
+❌ Example: “Just explain it” (too vague)
+
+🔍 How to evaluate:
 
 Read the prompt carefully.
 
-For each of the four components, decide whether it is Present or Missing.
+For each component, decide whether it is Present or Missing.
 
-Mark an element “Missing” only if it is truly absent or so vague that it cannot guide the AI.
+Mark as Missing only if it is absent or too vague to guide the AI.
 
-If an element could be clearer but is still serviceable, consider it Present and save suggestions for the “Improvements” line.
+If a component is Missing but the prompt includes a relevant example, include it as:
 
-Keep the assessment encouraging and focused on major gaps, not minor wording tweaks.
+“An example is mentioned: [insert example].”
 
-Output format
+If a component is Present but weak or underspecified, suggest how to clarify it.
 
-If any component is Missing:
+Focus on major structural gaps, not surface-level edits.
 
-Let’s try again! 🤓
+📄 Output format (follow this exact format):
 
-Missing components: [List any of: Task, Input, Steps, Output]
+If **any component is missing or underdefined**, return this **exact format**:
 
-Improvements suggested for: [List any elements that are present but could be clearer]
+Let’s try again! 🤓  
 
-Breakdown:
-Task: [Brief note if missing or how it could be clarified]
-Input: [Brief note if missing or how it could be clarified]
-Steps: [Brief note if missing or how it could be clarified]
-Output: [Brief note if missing or how it could be clarified]
+Task: [Missing ⛔, Present but could use improvements 🚧, or Present 🌟. Include explanation. If an example is found, write: “An example is mentioned: <example>.”]  
+Input: [Same format]  
+Steps: [Same format]  
+Output: [Same format]
 
-If all four components are Present:
+If **all four components are Present**, return this **exact format**:
 
 Amazing job! 🎉
 
-All four components are clearly present!
+Highlights: [Optional 1–2 phrase summary of strengths, e.g. “well-scoped inputs”, “action-oriented steps”, “precise output formatting”]
 
-Highlights: [E.g. “well-scoped inputs”, “action-oriented steps”, “precise output formatting”]
-
-Evaluation criteria recap:
-Task – Starts with a verb, states deliverable & audience
-Input – Specific, bounded data/context
-Steps – Logically ordered instructions using numbers, bullets, or paragraph sequencing
-Output – Clear tone, length, and formatting guidance
-
-Style guidelines
-
-Do NOT rewrite or suggest an improved prompt.
-
-Do NOT ask the user follow-up questions.
-
-Do NOT end with extra guidance or speculative improvements beyond the required lines.
-
-Keep feedback concise—focus only on what matters for prompt structure.
+✍️ Style Guidelines
+✅ Always evaluate whatever the input is
+✅ Focus only on structure (not grammar, content quality, or prompt intent)
+✅ Include prompt examples only if they relate to a missing component
+❌ Do NOT change the output format
+❌ Do NOT rewrite or improve the prompt
+❌ Do NOT ask the user follow-up questions
+❌ Do NOT add speculative guidance outside the requested output format
+✅ Keep feedback tight, relevant, and focused on what matters for structure
         `;
 
         try {
@@ -121,19 +236,21 @@ Keep feedback concise—focus only on what matters for prompt structure.
         const systemInstructions = `
 Your task is to generate structured support content to help the facilitator guide the participant toward a better prompt.
 
-Inputs:Prompt:
-
+Inputs:
+Prompt:
 Evaluation:
 
 Your output must follow this format:
 
 Task Summary:
-Summarize what the participant is trying to achieve based on their prompt. Use the evaluation only to clarify what’s missing or weak—don’t just restate it. Write 1–2 objective sentences. If the task is unclear, say so.
+Summarize what the participant is trying to achieve based on their prompt. Use the evaluation only to clarify what’s missing or unclear—don’t just restate it. Write 1–2 objective sentences. If the task is unclear, say so.
 
 Be use-case specific when possible: e.g., suggest uploading a file, clarifying audience, giving example inputs, or breaking the task into steps.
 
 Mitigation Strategies:
-List 1–3 specific, proactive strategies the participant can use to avoid similar issues in future prompts. These should be generalizable, forward-looking best practices (e.g., “Start by identifying your audience,” or “Always include a clear outcome or deliverable.”). Use bullet points.
+List 1–5 specific, proactive strategies the participant can use to include missing components in future prompts. Focus on omissions—what they failed to specify, assume, or define—not just vague improvements. These strategies should be forward-looking and generalizable.
+
+Use bullet points. Avoid commenting on tone, phrasing, or optimization unless directly tied to a missing structural element.
         `;
 
         try {
@@ -160,47 +277,109 @@ List 1–3 specific, proactive strategies the participant can use to avoid simil
         return { notes, facilitatorFeedback };
       };
 
-
-      // ---------------------------
-      // Storage Toggle
-      // ---------------------------
-      let USE_LOCAL_STORAGE = false; // Will be set by backend
-
-      const STORAGE_KEY = 'prompt_records_v1';
-
-      function saveRecordLocal(rec) {
-        const arr = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-        arr.unshift(rec);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-      }
-      function loadRecordsLocal() {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-      }
-
       // ---------------------------
       // React Component
       // ---------------------------
+      function LoginForm({ onLogin }) {
+        const [password, setPassword] = React.useState("");
+        const [isLoading, setIsLoading] = React.useState(false);
+        const [error, setError] = React.useState("");
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          if (!password.trim()) return;
+          
+          setIsLoading(true);
+          setError("");
+          
+          const result = await login(password);
+          if (result.success) {
+            onLogin(result.workshopName);
+          } else {
+            setError(result.error || "Invalid or expired password");
+          }
+          setIsLoading(false);
+        };
+
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-md w-full space-y-8">
+              <div className="text-center">
+                <img src="./resources/tm_logo.png" alt="Thinking Machines Logo" className="mx-auto h-32 w-auto mb-6" />
+                <h2 className="text-3xl font-bold text-gray-900">Access Workshop</h2>
+                <p className="mt-2 text-sm text-gray-600">Enter your workshop password to continue</p>
+              </div>
+              <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700">Workshop Password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1 appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter workshop password"
+                    required
+                    autoFocus
+                  />
+                </div>
+                {error && (
+                  <div className="text-red-600 text-sm">{error}</div>
+                )}
+                <div>
+                  <button
+                    type="submit"
+                    disabled={isLoading || !password.trim()}
+                    className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                      isLoading || !password.trim() 
+                        ? 'bg-gray-400 cursor-not-allowed' 
+                        : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                    }`}
+                  >
+                    {isLoading ? 'Verifying...' : 'Enter Workshop'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
       function App() {
+        const [authenticated, setAuthenticated] = React.useState(false);
+        const [workshopName, setWorkshopName] = React.useState("");
         const [firstName, setFirstName] = React.useState("");
         const [lastName,  setLastName]  = React.useState("");
         const [prompt,    setPrompt]    = React.useState("");
-        const [records,   setRecords]   = React.useState([]);
         const [isSubmitting, setIsSubmitting] = React.useState(false);
         const [lastEval,  setLastEval]  = React.useState(null);
-        // Facilitator Feedback is not shown to the user
+        const [isLoading, setIsLoading] = React.useState(true);
 
-        // On mount, get storage mode and load records if local
+        // Check authentication status on mount
         React.useEffect(() => {
-          fetch('/api/storage-mode').then(r => r.json()).then(({ useLocalStorage }) => {
-            USE_LOCAL_STORAGE = useLocalStorage;
-            if (USE_LOCAL_STORAGE) setRecords(loadRecordsLocal());
+          checkAuthStatus().then(status => {
+            setAuthenticated(status.authenticated);
+            setWorkshopName(status.workshopName || "");
+            setIsLoading(false);
           });
         }, []);
 
-        // For localStorage, keep in sync
-        React.useEffect(() => {
-          if (USE_LOCAL_STORAGE) localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-        }, [records]);
+        const handleLogin = (workshop) => {
+          setAuthenticated(true);
+          setWorkshopName(workshop);
+        };
+
+        if (isLoading) {
+          return (
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="text-gray-600">Loading...</div>
+            </div>
+          );
+        }
+
+        if (!authenticated) {
+          return <LoginForm onLogin={handleLogin} />;
+        }
 
         const handleSubmit = async (e) => {
           e.preventDefault();
@@ -219,22 +398,18 @@ List 1–3 specific, proactive strategies the participant can use to avoid simil
             notes: notes,
             facilitatorfeedback: facilitatorFeedback
           };
-          if (USE_LOCAL_STORAGE) {
-            saveRecordLocal(newRec);
-            setRecords(prev => [newRec, ...prev]);
-          } else {
-            // Save to backend (now using prompts table in promptdb)
-            try {
-              await fetch('/api/record', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newRec)
-              });
-            } catch (err) {
-              alert('Failed to save record to server.');
-            }
-            setRecords(prev => [newRec, ...prev]);
+          
+          // Save to backend (using prompts table in PostgreSQL)
+          try {
+            await fetch('/api/record', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newRec)
+            });
+          } catch (err) {
+            alert('Failed to save record to server.');
           }
+          
           setLastEval({ notes, ts });
           setPrompt(""); setFirstName(""); setLastName("");
           setIsSubmitting(false);
@@ -250,6 +425,9 @@ List 1–3 specific, proactive strategies the participant can use to avoid simil
               <div className="flex-1 max-w-5xl mx-auto">
                 <header className="mb-6 text-left">
                   <h1 className="text-4xl font-bold leading-tight mb-2">Thinking Machines Prompt Evaluator</h1>
+                  {workshopName && (
+                    <div className="text-lg text-blue-600 font-semibold mb-2">{workshopName}</div>
+                  )}
                   <span className="text-sm text-gray-500 hidden sm:inline">Beta testing</span>
                   <p className="text-gray-600 mt-2">Quickly score &amp; review prompts during enablement sessions.</p>
                 </header>
@@ -270,14 +448,14 @@ List 1–3 specific, proactive strategies the participant can use to avoid simil
                     </div>
                     <div className="flex items-center gap-4">
                       <button type="submit" disabled={isSubmitting || !prompt.trim()} className={`px-7 py-3 rounded text-white ${isSubmitting || !prompt.trim() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>{isSubmitting ? 'Evaluating…' : 'Submit'}</button>
-                      <span className="ml-auto text-sm text-gray-500 hidden sm:inline">Stored locally for admin view</span>
+                      <span className="ml-auto text-sm text-gray-500 hidden sm:inline">Stored on PostgreSQL</span>
                     </div>
                   </form>
 
                   {lastEval && (
                     <div className="mt-10 bg-white border-l-4 border-blue-500 shadow rounded-lg p-8 fade-in">
                       <h3 className="font-semibold mb-2 text-base">Evaluation Feedback <span className="text-gray-500">({new Date(lastEval.ts).toLocaleString()})</span></h3>
-                      <p className="whitespace-pre-wrap break-words text-sm">{lastEval.notes}</p>
+                      <p className="whitespace-pre-wrap break-words text-sm">{formatEvaluation(lastEval.notes)}</p>
                     </div>
                   )}
 
