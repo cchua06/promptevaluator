@@ -1,0 +1,72 @@
+name: Deploy Database Schema
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-schema:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate with Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Set project from Secret Manager
+      run: |
+        gcloud config set project $(gcloud secrets versions access latest --secret="GCP_PROJECT_ID")
+
+    - name: Get database credentials from Secret Manager
+      run: |
+        echo "PGHOST=localhost" > .env
+        echo "PGUSER=postgres" >> .env
+        echo "PGPASSWORD=$(gcloud secrets versions access latest --secret="CLOUDSQL_PASSWORD")" >> .env
+        echo "PGDATABASE=prompt-evaluator-db" >> .env
+        echo "PGPORT=5432" >> .env
+
+    - name: Upload schema file to VM
+      run: |
+        gcloud compute scp create_schema.sql $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+
+    - name: Upload .env file to VM
+      run: |
+        gcloud compute scp .env $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
+
+    - name: Apply schema changes
+      run: |
+        echo "Applying schema changes from create_schema.sql..."
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && source .env && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -f create_schema.sql"
+
+    - name: Verify schema deployment
+      run: |
+        echo "Verifying schema deployment..."
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && source .env && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -c '\dt'"
+
+    - name: Show table structure
+      run: |
+        echo "Current table structure:"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && source .env && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -c '\d prompts' && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -c '\d passwords'"
+
+    - name: Restart application containers
+      run: |
+        echo "Restarting application containers to ensure they pick up schema changes..."
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose restart"
+
+    - name: Clean up temporary files
+      run: |
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~ && rm -f create_schema.sql .env create_only.sql"
+
+    - name: Schema deployment status
+      run: |
+        echo "✅ Database schema deployment completed!"
+        echo "📊 Database: $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME")"
+        echo "📝 Commit: ${{ github.sha }}"
+        echo "🕒 Timestamp: $(date)"
+        echo "✅ Schema changes applied successfully"
