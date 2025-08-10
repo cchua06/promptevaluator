@@ -31,17 +31,19 @@ jobs:
       run: |
         gcloud compute scp create_schema.sql $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
+
+
     - name: Apply schema changes
       run: |
         echo "Applying schema changes from create_schema.sql..."
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") \
           --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") \
-          --command="cd ~/promptevaluator && source .env && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -f ~/create_schema.sql"
+          --command="cd ~/promptevaluator && PGPASSWORD=\$(grep PGPASSWORD .env | cut -d'=' -f2 | tr -d '\"' | tr -d \"'\") psql -h localhost -U postgres -d prompt-evaluator-db -f ~/create_schema.sql"
 
     - name: Verify schema deployment
       run: |
         echo "Verifying schema deployment..."
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && source .env && psql -h \$PGHOST -U \$PGUSER -d \$PGDATABASE -c '\dt'"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && PGPASSWORD=\$(grep PGPASSWORD .env | cut -d'=' -f2 | tr -d '\"' | tr -d \"'\") psql -h localhost -U postgres -d prompt-evaluator-db -c '\dt'"
 
     - name: Restart application containers
       run: |

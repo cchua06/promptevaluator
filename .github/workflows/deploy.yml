@@ -42,9 +42,9 @@ jobs:
       run: |
         gcloud compute scp .env $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
-    - name: Debug .env file
-      run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
+    # - name: Debug .env file
+    #   run: |
+    #     gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
 
     - name: Stop containers
       run: |
