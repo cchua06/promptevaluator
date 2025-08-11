@@ -42,6 +42,12 @@ jobs:
       run: |
         gcloud compute scp .env $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME"):~/promptevaluator/ --zone=$(gcloud secrets versions access latest --secret="VM_ZONE")
 
+    - name: Build and push Docker image
+      run: |
+        gcloud auth configure-docker us-central1-docker.pkg.dev
+        docker build -t us-central1-docker.pkg.dev/promptevaluator-468202/prompt-evaluator-artifact-repository/prompt-evaluator:latest .
+        docker push us-central1-docker.pkg.dev/promptevaluator-468202/prompt-evaluator-artifact-repository/prompt-evaluator:latest
+
     # - name: Debug .env file
     #   run: |
     #     gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
@@ -66,6 +72,13 @@ jobs:
       run: |
         sleep 30  # Wait for application to start
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose ps && docker-compose logs --tail=20"
+
+    - name: Verify deployment
+      run: |
+        echo "Checking if new code is deployed..."
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="curl -s http://localhost:3000/health"
+        echo "Checking page content..."
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="curl -s http://localhost:3000/ | grep -i 'test' || echo 'Test not found in response'"
 
     - name: Deployment status
       run: |
