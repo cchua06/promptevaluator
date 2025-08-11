@@ -52,13 +52,14 @@ jobs:
     #   run: |
     #     gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && cat .env"
 
-    - name: Stop containers
+    - name: Stop containers and clean up images
       run: |
         gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose down"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="docker rmi us-central1-docker.pkg.dev/promptevaluator-468202/prompt-evaluator-artifact-repository/prompt-evaluator:latest 2>/dev/null || true"
 
-    - name: Start containers
+    - name: Pull latest image and start containers
       run: |
-        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose up -d --build"
+        gcloud compute ssh $(gcloud secrets versions access latest --secret="VM_INSTANCE_NAME") --zone=$(gcloud secrets versions access latest --secret="VM_ZONE") --command="cd ~/promptevaluator && docker-compose pull && docker-compose up -d"
 
     - name: Check container status
       run: |
