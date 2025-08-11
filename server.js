@@ -46,7 +46,7 @@ const pool = new Pool();
         prompt    TEXT,
         notes     TEXT,
         facilitatorfeedback TEXT,
-        password TEXT
+        workshop_name TEXT
       );
     `);
     console.log('Connected to Postgres');
@@ -59,12 +59,36 @@ const pool = new Pool();
 // ---- OpenAI API Key (now loaded from .env) ----
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+
 // Authentication middleware
 const requireAuth = (req, res, next) => {
   if (req.session.authenticated) {
     next();
   } else {
     res.status(401).json({ error: 'Authentication required' });
+  }
+};
+
+// Middleware to check if password is still valid (not deleted/expired)
+const requireValidPassword = async (req, res, next) => {
+  const password = req.session.password;
+  if (!password) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: 'Your workshop password is no longer valid. Please log in again.' });
+  }
+  try {
+    const pwResult = await pool.query(
+      'SELECT * FROM passwords WHERE id = $1 AND date_of_expiry > NOW()',
+      [password]
+    );
+    if (pwResult.rows.length === 0) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: 'Your workshop password is no longer valid. Please log in again.' });
+    }
+    next();
+  } catch (err) {
+    req.session.destroy(() => {});
+    return res.status(500).json({ error: 'Failed to validate password' });
   }
 };
 
@@ -130,7 +154,7 @@ app.get('/api/auth-status', (req, res) => {
 });
 
 // Proxy endpoint for prompt evaluation
-app.post('/api/evaluate', requireAuth, async (req, res) => {
+app.post('/api/evaluate', requireAuth, requireValidPassword, async (req, res) => {
   try {
     const { prompt, systemInstructions } = req.body;
     if (!prompt || !systemInstructions) {
@@ -203,14 +227,14 @@ app.post('/api/facilitator-feedback', requireAuth, async (req, res) => {
 
 
 // API: Save a new record
-app.post('/api/record', requireAuth, async (req, res) => {
+app.post('/api/record', requireAuth, requireValidPassword, async (req, res) => {
   const { id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback } = req.body;
-  const password = req.session.password; // Get password from session
+  const workshopName = req.session.workshopName; // Get workshop name from session
   try {
     await pool.query(
-      `INSERT INTO prompts (id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback, password)
+      `INSERT INTO prompts (id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback, workshop_name)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback, password]
+      [id, timestamp, firstname, lastname, prompt, notes, facilitatorfeedback, workshopName]
     );
     res.json({ success: true });
   } catch (err) {
@@ -223,10 +247,8 @@ app.post('/api/record', requireAuth, async (req, res) => {
 app.get('/api/records', requireAdminAuth, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.*, pw.workshop_name 
-      FROM prompts p 
-      LEFT JOIN passwords pw ON p.password = pw.id 
-      ORDER BY p.timestamp DESC
+      SELECT * FROM prompts 
+      ORDER BY timestamp DESC
     `);
     res.json(result.rows);
   } catch (err) {
@@ -276,11 +298,10 @@ app.get('/api/passwords', requireAdminAuth, async (req, res) => {
 app.post('/api/password', requireAdminAuth, async (req, res) => {
   const { workshopName, expiryDate } = req.body;
   try {
-    // Generate a random password
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    // Generate a 6-digit numeric password
     let password = '';
-    for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 6; i++) {
+      password += Math.floor(Math.random() * 10).toString();
     }
     
     await pool.query(
@@ -320,7 +341,38 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(ROOT_DIR, 'admin.html'));
 });
 
-// Main route to serve user.html
+// Route to handle password-based URLs for auto-login
+app.get('/:password', async (req, res) => {
+  const { password } = req.params;
+  
+  // Skip if it's a known static route or starts with api
+  if (password === 'admin' || password.startsWith('api') || password.includes('.')) {
+    return res.sendFile(path.join(ROOT_DIR, 'user.html'));
+  }
+  
+  try {
+    // Check if password exists in passwords table and is not expired
+    const result = await pool.query(
+      'SELECT * FROM passwords WHERE id = $1 AND date_of_expiry > NOW()',
+      [password]
+    );
+    
+    if (result.rows.length > 0) {
+      // Valid password - set session and serve user.html
+      req.session.authenticated = true;
+      req.session.password = password;
+      req.session.workshopName = result.rows[0].workshop_name;
+    }
+    // Always serve user.html regardless of password validity
+    // The frontend will check auth status and show appropriate UI
+    res.sendFile(path.join(ROOT_DIR, 'user.html'));
+  } catch (err) {
+    console.error('Error checking password from URL:', err);
+    res.sendFile(path.join(ROOT_DIR, 'user.html'));
+  }
+});
+
+// Main route to serve user.html (fallback)
 app.use((req, res, next) => {
   res.sendFile(path.join(ROOT_DIR, 'user.html'));
 });

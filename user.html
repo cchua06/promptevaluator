@@ -306,7 +306,7 @@ Use bullet points. Avoid commenting on tone, phrasing, or optimization unless di
             <div className="max-w-md w-full space-y-8">
               <div className="text-center">
                 <img src="./resources/tm_logo.png" alt="Thinking Machines Logo" className="mx-auto h-32 w-auto mb-6" />
-                <h2 className="text-3xl font-bold text-gray-900">Access Workshop</h2>
+                <h2 className="text-3xl font-bold text-gray-900">GenAI Enablement Workshop</h2>
                 <p className="mt-2 text-sm text-gray-600">Enter your workshop password to continue</p>
               </div>
               <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -361,6 +361,13 @@ Use bullet points. Avoid commenting on tone, phrasing, or optimization unless di
             setAuthenticated(status.authenticated);
             setWorkshopName(status.workshopName || "");
             setIsLoading(false);
+            
+            // If authenticated via URL, show a success message
+            const urlPath = window.location.pathname;
+            if (status.authenticated && urlPath !== '/' && !urlPath.startsWith('/admin')) {
+              // Clean up URL to remove password for security
+              window.history.replaceState({}, document.title, '/');
+            }
           });
         }, []);
 
@@ -398,18 +405,33 @@ Use bullet points. Avoid commenting on tone, phrasing, or optimization unless di
             notes: notes,
             facilitatorfeedback: facilitatorFeedback
           };
-          
+
           // Save to backend (using prompts table in PostgreSQL)
           try {
-            await fetch('/api/record', {
+            const res = await fetch('/api/record', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(newRec)
             });
+            if (res.status === 401) {
+              // Password deleted or expired, force logout
+              setAuthenticated(false);
+              setWorkshopName("");
+              setFirstName("");
+              setLastName("");
+              setPrompt("");
+              setLastEval(null);
+              alert('Your workshop password is no longer valid. Please log in again.');
+              setIsSubmitting(false);
+              return;
+            }
+            if (!res.ok) throw new Error('Failed to save record');
           } catch (err) {
             alert('Failed to save record to server.');
+            setIsSubmitting(false);
+            return;
           }
-          
+
           setLastEval({ notes, ts });
           setPrompt(""); setFirstName(""); setLastName("");
           setIsSubmitting(false);

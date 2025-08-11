@@ -15,5 +15,5 @@ CREATE TABLE prompts (
     prompt TEXT,
     notes TEXT,
     facilitatorFeedback TEXT,
-    password TEXT
+    workshop_name TEXT
 );
