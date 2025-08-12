@@ -100,6 +100,10 @@
       async function deletePassword(id) {
         await fetch(`/api/password/${id}`, { method: 'DELETE' });
       }
+      async function cleanExpiredPasswords() {
+        const res = await fetch('/api/passwords/expired', { method: 'DELETE' });
+        return res.json();
+      }
       async function createPassword(workshopName, expiryDate) {
         const res = await fetch('/api/password', {
           method: 'POST',
@@ -189,12 +193,35 @@
           }
         };
 
+        const handleCleanExpired = async () => {
+          if (confirm('Are you sure you want to delete all expired passwords?')) {
+            try {
+              const result = await cleanExpiredPasswords();
+              if (result.success) {
+                alert(`Deleted ${result.deletedCount} expired password(s)`);
+                loadPasswords(); // Reload the list
+              }
+            } catch (err) {
+              alert('Failed to clean expired passwords');
+            }
+          }
+        };
+
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">Manage Passwords</h2>
-                <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleCleanExpired}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                    title="Delete all expired passwords"
+                  >
+                    Clean
+                  </button>
+                  <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+                </div>
               </div>
               
               {loading ? (

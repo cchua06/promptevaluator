@@ -331,6 +331,17 @@ app.delete('/api/password/:id', requireAdminAuth, async (req, res) => {
   }
 });
 
+// API: Clean expired passwords (admin only)
+app.delete('/api/passwords/expired', requireAdminAuth, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM passwords WHERE date_of_expiry <= NOW() RETURNING *');
+    res.json({ success: true, deletedCount: result.rowCount, deletedPasswords: result.rows });
+  } catch (err) {
+    console.error('Error cleaning expired passwords:', err);
+    res.status(500).json({ error: 'Failed to clean expired passwords' });
+  }
+});
+
 app.use(express.static(ROOT_DIR, {
   extensions: ['html'],
   maxAge: 0
