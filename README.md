@@ -4,7 +4,7 @@ by: Cedric Chua (cedric.chua@thinkingmachin.es)
 
 ## Description
 
-A web app that can be used to provide custom feedback to evaluate user prompts to a LLM. The frontend is build on React, and the backend uses NodeJS. The service is being hosted as a POC on Render (https://promptevaluator-umx3.onrender.com/). It has a participant view and an admin view to see collated user prompts.
+A web app that can be used to provide custom feedback to evaluate user prompts to a LLM. It has a participant view and an admin view to see collated user prompts. The frontend is build on React, and the backend uses NodeJS. It's deployed using Docker and GCP (https://prompt-checker.tm8.dev/). Admin view: (https://prompt-checker.tm8.dev/admin).
 
 ## Production Deployment (GCP VM)
 
