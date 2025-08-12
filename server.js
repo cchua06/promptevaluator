@@ -18,7 +18,7 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+  cookie: { secure: false, maxAge: 12 * 60 * 60 * 1000 } // 12 hours
 }));
 
 // Basic request logging and JSON parsing (must be before routes)
