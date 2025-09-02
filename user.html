@@ -62,6 +62,15 @@
           return result;
         } catch (e) {
           // If it's not JSON, return the original text
+          if (notesText.includes('<correct_output>')) {
+              const content = notesText.replace(/<correct_output>|<\/correct_output>/g, '').trim();
+              return content;
+          }
+          // Handle <failed_output> responses
+          if (notesText.includes('<failed_output>')) {
+            let content = notesText.replace(/<failed_output>|<\/failed_output>/g, '').trim();
+            return content;
+          }
           return notesText;
         }
       }
@@ -187,28 +196,32 @@ Focus on major structural gaps, not surface-level edits.
 
 If **any component is missing or underdefined**, return this **exact format**:
 
+<failed_output>
 Let’s try again! 🤓  
 
 Task: [Missing ⛔, Present but could use improvements 🚧, or Present 🌟. Include explanation. If an example is found, write: “An example is mentioned: <example>.”]  
 Input: [Same format]  
 Steps: [Same format]  
 Output: [Same format]
+</failed_output>
 
 If **all four components are Present**, return this **exact format**:
 
+<correct_output>
 Amazing job! 🎉
 
 Highlights: [Optional 1–2 phrase summary of strengths, e.g. “well-scoped inputs”, “action-oriented steps”, “precise output formatting”]
+</correct_output>
 
 ✍️ Style Guidelines
 ✅ Always evaluate whatever the input is
 ✅ Focus only on structure (not grammar, content quality, or prompt intent)
 ✅ Include prompt examples only if they relate to a missing component
+✅ Keep feedback tight, relevant, and focused on what matters for structure
 ❌ Do NOT change the output format
 ❌ Do NOT rewrite or improve the prompt
 ❌ Do NOT ask the user follow-up questions
 ❌ Do NOT add speculative guidance outside the requested output format
-✅ Keep feedback tight, relevant, and focused on what matters for structure
         `;
 
         try {
