@@ -156,7 +156,7 @@
       // ---------------------------
 
       //Fail Regex
-      const failRe = /^Let['’]s try again!?/;
+      const failRe = /^<failed_output>/;
       
       function PasswordManager({ onClose }) {
         const [passwords, setPasswords] = React.useState([]);
